@@ -11,7 +11,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<!-- Barcode-Scanner (html5-qrcode 2.3.8), liegt als eigene Datei im selben Ordner wie diese Seite -->
+<script src="html5-qrcode.min.js"></script>
 <style>
 /* Layout: Werkbank-App. Kopfleiste + Ansicht; am Handy unten eine Tab-Leiste und ein Scan-Knopf.
    Farben: kühles Tinten-Grau als Grund, Messing (wie Metallicfarbe) als einziger Akzent. */
@@ -258,10 +259,10 @@ dialog::backdrop{background:rgb(10 12 16 / .55)}
     <nav class="tabs" aria-label="Bereiche">
       <button data-go="farben">Farben</button>
       <button data-go="rezepte">Rezepte</button>
-      <button data-go="einstellungen">Sync &amp; Daten</button>
+      <button data-go="einstellungen">Sichern &amp; Laden</button>
     </nav>
     <span class="spacer"></span>
-    <button class="sync" id="syncPill" data-s="off" title="Google Drive"><span class="dot"></span><span id="syncText">Nur lokal</span></button>
+    <button class="sync" id="syncPill" data-s="off" title="Sicherung"><span class="dot"></span><span id="syncText">…</span></button>
   </div>
 </header>
 
@@ -274,7 +275,7 @@ dialog::backdrop{background:rgb(10 12 16 / .55)}
 <nav class="bottom" aria-label="Bereiche">
   <button data-go="farben"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="7" width="6" height="13" rx="1.5"/><rect x="14" y="7" width="6" height="13" rx="1.5"/><path d="M5 7V4h4v3M15 7V4h4v3"/></svg>Farben</button>
   <button data-go="rezepte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h11l3 3v13H5z"/><path d="M8 10h8M8 14h8M8 18h5"/></svg>Rezepte</button>
-  <button data-go="einstellungen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 18a4 4 0 0 1-.6-7.96A6 6 0 0 1 18 9.5a4 4 0 0 1-1 8.5z"/></svg>Sync</button>
+  <button data-go="einstellungen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Sichern</button>
 </nav>
 
 <!-- Farbe bearbeiten -->
@@ -361,13 +362,6 @@ dialog::backdrop{background:rgb(10 12 16 / .55)}
 
 <script>
 "use strict";
-/* ============================================================
-   KONFIGURATION
-   Trage hier die OAuth-Client-ID aus der Google Cloud Console ein
-   (oder in der App unter "Sync & Daten").
-   ============================================================ */
-const GOOGLE_CLIENT_ID = "";
-const DRIVE_FOLDER = "Farbregal";
 const FILE_PAINTS = "farben.json";
 const FILE_RECIPES = "rezepte.json";
 
@@ -464,7 +458,7 @@ async function persist(){
   await idb.set("recipes", {list:S.recipes, del:S.recipeDel});
 }
 let saveT;
-function changed(){ persist(); clearTimeout(saveT); saveT=setTimeout(()=>Sync.run(), 1500); }
+function changed(){ persist(); clearTimeout(saveT); saveT=setTimeout(()=>Backup.status(), 400); }
 
 /* ---------- Farben: Logik ---------- */
 function findDuplicate(p, exceptId){
@@ -608,7 +602,7 @@ async function openScan(target=null){
   scanTarget=target;
   $("#scanErr").hidden=true; $("#scanResult").hidden=true; $("#scanManual").value=""; $("#reader").hidden=false;
   $("#dlgScan").showModal();
-  if(!window.Html5Qrcode){ showScanErr("Der Scanner konnte nicht geladen werden (keine Internetverbindung?). Tippe den Barcode unten ein."); return; }
+  if(!window.Html5Qrcode){ showScanErr("Der Scanner konnte nicht geladen werden: Die Datei html5-qrcode.min.js fehlt neben index.html. Bis dahin kannst du den Barcode unten eintippen."); return; }
   try{
     qr = new Html5Qrcode("reader", {formatsToSupport:scanFormats(), verbose:false, experimentalFeatures:{useBarCodeDetectorIfSupported:true}});
     await qr.start({facingMode:"environment"}, {fps:12, qrbox:(w,h)=>({width:Math.min(300,w*0.85), height:Math.min(150,h*0.5)})}, code=>gotCode(code), ()=>{});
@@ -851,120 +845,95 @@ function loadSample(){
   changed(); render(); toast("Beispieldaten geladen");
 }
 
-/* ---------- Google Drive Sync ---------- */
-const Sync = {
-  token:null, exp:0, client:null, folderId:null, files:{}, busy:false, again:false,
-  clientId(){ return GOOGLE_CLIENT_ID || ls.get("fr.clientId",""); },
-  status(s, text){ const p=$("#syncPill"); p.dataset.s=s; $("#syncText").textContent=text; },
-  loadGis(){ return new Promise((res,rej)=>{ if(window.google?.accounts?.oauth2) return res();
-    const s=document.createElement("script"); s.src="https://accounts.google.com/gsi/client"; s.onload=res; s.onerror=()=>rej(new Error("gis")); document.head.appendChild(s); }); },
-  async getToken(prompt=""){
-    if(this.token && Date.now()<this.exp-60000) return this.token;
-    await this.loadGis();
-    return new Promise((res,rej)=>{
-      if(!this.client) this.client=google.accounts.oauth2.initTokenClient({client_id:this.clientId(), scope:"https://www.googleapis.com/auth/drive.file", callback:()=>{}});
-      this.client.callback=r=>{ if(r.error) return rej(new Error(r.error)); this.token=r.access_token; this.exp=Date.now()+r.expires_in*1000; ls.set("fr.connected",true); res(this.token); };
-      this.client.error_callback=e=>rej(new Error(e.type||"popup"));
-      this.client.requestAccessToken({prompt, hint: ls.get("fr.hint", undefined)});
-    });
+/* ---------- Sichern & Laden (manuell über Dateien) ---------- */
+/* Merkt sich einen Fingerabdruck des zuletzt gesicherten/geladenen Stands,
+   damit die App anzeigen kann, ob es ungesicherte Änderungen gibt. */
+function hash(str){ let h=5381; for(let i=0;i<str.length;i++) h=((h<<5)+h+str.charCodeAt(i))|0; return str.length+":"+(h>>>0).toString(36); }
+function fp(file){ const {aktualisiert, ...rest}=file||{}; return hash(JSON.stringify(rest)); }
+const Backup = {
+  isDirty(kind){
+    const cur = kind==="farben" ? fp(paintsToFile()) : fp(recipesToFile());
+    const empty = kind==="farben" ? !S.paints.length && !Object.keys(S.paintDel).length : !S.recipes.length && !Object.keys(S.recipeDel).length;
+    return !empty && cur!==ls.get("fr.base."+kind,"");
   },
-  async api(url, opt={}, retry=true){
-    const t=await this.getToken();
-    const r=await fetch(url,{...opt,headers:{...(opt.headers||{}),Authorization:"Bearer "+t}});
-    if(r.status===401 && retry){ this.token=null; return this.api(url,opt,false); }
-    if(!r.ok) throw new Error("Drive "+r.status);
-    return r;
-  },
-  async find(q){ const r=await this.api("https://www.googleapis.com/drive/v3/files?spaces=drive&fields=files(id,name)&q="+encodeURIComponent(q)); return (await r.json()).files?.[0]?.id||null; },
-  async folder(){
-    if(this.folderId) return this.folderId;
-    let id=await this.find(`name='${DRIVE_FOLDER}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
-    if(!id){ const r=await this.api("https://www.googleapis.com/drive/v3/files?fields=id",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:DRIVE_FOLDER,mimeType:"application/vnd.google-apps.folder"})}); id=(await r.json()).id; }
-    return this.folderId=id;
-  },
-  async fileId(name){
-    if(this.files[name]) return this.files[name];
-    const id=await this.find(`name='${name}' and '${await this.folder()}' in parents and trashed=false`);
-    if(id) this.files[name]=id; return id;
-  },
-  async download(id){ const r=await this.api(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`); try{ return await r.json(); }catch(e){ return null; } },
-  async upload(name, data){
-    const body=JSON.stringify(data,null,1); const id=await this.fileId(name);
-    if(id){ await this.api(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`,{method:"PATCH",headers:{"Content-Type":"application/json"},body}); return; }
-    const b="frb"+Math.random().toString(36).slice(2);
-    const multipart=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({name,parents:[await this.folder()],mimeType:"application/json"})}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${b}--`;
-    const r=await this.api("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",{method:"POST",headers:{"Content-Type":"multipart/related; boundary="+b},body:multipart});
-    this.files[name]=(await r.json()).id;
-  },
-  fingerprint(f){ const {aktualisiert, ...rest}=f||{}; return JSON.stringify(rest); },
-  async run(interactive=false){
-    if(!this.clientId() || (!ls.get("fr.connected",false) && !interactive)) return;
-    if(this.busy){ this.again=true; return; }
-    if(!navigator.onLine){ this.status("err","Offline – lokal gespeichert"); return; }
-    this.busy=true; this.status("busy","Synchronisiere …");
-    try{
-      if(interactive) await this.getToken("");
-      // Farben
-      let id=await this.fileId(FILE_PAINTS), remote=id?await this.download(id):null, rp=paintsFromFile(remote);
-      let m=merge(S.paints,S.paintDel,rp.list,rp.del); S.paints=m.list; S.paintDel=m.del;
-      let out=paintsToFile(); if(!id || this.fingerprint(out)!==this.fingerprint(remote)) await this.upload(FILE_PAINTS,out);
-      // Rezepte
-      id=await this.fileId(FILE_RECIPES); remote=id?await this.download(id):null; rp=recipesFromFile(remote);
-      m=merge(S.recipes,S.recipeDel,rp.list,rp.del); S.recipes=m.list; S.recipeDel=m.del;
-      out=recipesToFile(); if(!id || this.fingerprint(out)!==this.fingerprint(remote)) await this.upload(FILE_RECIPES,out);
-      await persist();
-      this.status("ok","Drive · "+new Date().toLocaleTimeString("de-AT",{hour:"2-digit",minute:"2-digit"}));
-      if(!S.editing && !$("dialog[open]")) render();
-    }catch(err){
-      const msg=String(err.message||err);
-      if(/popup|access_denied|gis|interaction|consent/.test(msg)) this.status("err","Tippen zum Verbinden");
-      else this.status("err","Sync fehlgeschlagen – lokal gespeichert");
-      console.warn(err);
-    }finally{
-      this.busy=false; if(this.again){ this.again=false; setTimeout(()=>this.run(),300); }
-    }
-  },
-  disconnect(){ try{ if(this.token) google.accounts.oauth2.revoke(this.token,()=>{}); }catch(e){} this.token=null; this.folderId=null; this.files={}; ls.set("fr.connected",false); this.status("off","Nur lokal"); }
+  mark(kind, file){ ls.set("fr.base."+kind, fp(file)); },
+  status(){
+    const p=$("#syncPill"), dF=this.isDirty("farben"), dR=this.isDirty("rezepte"), last=ls.get("fr.lastBackup",null);
+    if(dF||dR){ p.dataset.s="err"; $("#syncText").textContent = "Nicht gesichert: "+[dF&&"Farben",dR&&"Rezepte"].filter(Boolean).join(" + "); }
+    else if(last){ p.dataset.s="ok"; $("#syncText").textContent="Abgeglichen "+new Date(last).toLocaleDateString("de-AT",{day:"2-digit",month:"2-digit"})+" "+new Date(last).toLocaleTimeString("de-AT",{hour:"2-digit",minute:"2-digit"}); }
+    else { p.dataset.s="off"; $("#syncText").textContent="Noch nichts gesichert"; }
+  }
 };
-$("#syncPill").onclick=()=>{ if(!Sync.clientId()){ go("einstellungen"); return; } Sync.run(true); };
-document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") Sync.run(); });
-window.addEventListener("online",()=>Sync.run());
+$("#syncPill").onclick=()=>go("einstellungen");
 
-/* ---------- Ansicht: Sync & Daten ---------- */
+const isTouch = matchMedia("(pointer: coarse)").matches;
+async function exportFiles(kinds){
+  const files = kinds.map(k=>{
+    const data = k==="farben" ? paintsToFile() : recipesToFile();
+    return {k, data, file:new File([JSON.stringify(data,null,1)], k==="farben"?FILE_PAINTS:FILE_RECIPES, {type:"application/json"})};
+  });
+  const list = files.map(f=>f.file);
+  // Handy/Tablet: Teilen-Menü, dort "Drive" oder "In Dateien sichern" wählen
+  if(isTouch && navigator.canShare && navigator.canShare({files:list})){
+    try{ await navigator.share({files:list, title:"Farbregal-Sicherung"}); }
+    catch(err){ if(err.name==="AbortError"){ toast("Sichern abgebrochen"); return; } downloadFiles(list); }
+  } else downloadFiles(list);
+  files.forEach(f=>Backup.mark(f.k, f.data));
+  ls.set("fr.lastBackup", now()); Backup.status(); render();
+  toast(files.length>1 ? "Beide Dateien gesichert – jetzt auf Drive hochladen" : `${files[0].file.name} gesichert`);
+}
+function downloadFiles(list){
+  list.forEach((f,i)=>setTimeout(()=>{ const a=document.createElement("a"); a.href=URL.createObjectURL(f); a.download=f.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),3000); }, i*400));
+}
+async function importFiles(fileList){
+  const done=[];
+  for(const f of fileList){
+    let d; try{ d=JSON.parse(await f.text()); }catch(e){ toast(`${f.name} ist keine gültige JSON-Datei.`); continue; }
+    const parts = d.format ? [d] : [d.farben, d.rezepte];
+    for(const part of parts){
+      if(!part) continue;
+      if(part.format?.startsWith("farbregal-farben") || part.hersteller){
+        const p=paintsFromFile(part), m=merge(S.paints,S.paintDel,p.list,p.del); S.paints=m.list; S.paintDel=m.del; Backup.mark("farben",part); done.push("Farben");
+      } else if(part.format?.startsWith("farbregal-rezepte") || part.rezepte){
+        const p=recipesFromFile(part), m=merge(S.recipes,S.recipeDel,p.list,p.del); S.recipes=m.list; S.recipeDel=m.del; Backup.mark("rezepte",part); done.push("Rezepte");
+      }
+    }
+  }
+  if(!done.length){ toast("In der Auswahl war keine Farbregal-Datei."); return; }
+  await persist(); ls.set("fr.lastBackup", now()); Backup.status(); render();
+  toast(`${[...new Set(done)].join(" und ")} geladen und zusammengeführt`);
+}
+
+/* ---------- Ansicht: Sichern & Laden ---------- */
 function renderSettings(){
-  const v=$("#view"), cid=Sync.clientId(), connected=ls.get("fr.connected",false);
+  const v=$("#view"), dF=Backup.isDirty("farben"), dR=Backup.isDirty("rezepte"), last=ls.get("fr.lastBackup",null);
+  const state=(d)=>d?`<span style="color:var(--warn);font-weight:700">ungesicherte Änderungen</span>`:`<span style="color:var(--ok);font-weight:700">gesichert</span>`;
   v.innerHTML=`<div class="settings">
-    <div class="pagehead" style="margin:0"><h1>Sync &amp; Daten</h1></div>
-    <section class="panel" style="display:grid;gap:12px"><h2>Google Drive</h2>
-      <p style="margin:0">Alle Geräte lesen und schreiben dieselben zwei Dateien im Drive-Ordner <b>${DRIVE_FOLDER}</b>: <code>${FILE_PAINTS}</code> und <code>${FILE_RECIPES}</code>. Ohne Verbindung speichert die App nur auf diesem Gerät.</p>
-      <label class="f">OAuth-Client-ID${GOOGLE_CLIENT_ID?" (fest im Code eingetragen)":""}<input type="text" id="cid" value="${esc(cid)}" ${GOOGLE_CLIENT_ID?"readonly":""} placeholder="1234567890-abc….apps.googleusercontent.com" class="mono" style="font-size:13px"></label>
-      <div class="row">${connected?`<button class="btn primary" data-action="syncNow">Jetzt synchronisieren</button><button class="btn" data-action="disconnect">Trennen</button>`:`<button class="btn primary" data-action="connect">Mit Google Drive verbinden</button>`}</div>
-      <details><summary style="cursor:pointer;font-weight:700">So bekommst du eine Client-ID</summary>
-        <ol style="margin-top:10px">
-          <li>In der <b>Google Cloud Console</b> ein Projekt anlegen und die <b>Google Drive API</b> aktivieren.</li>
-          <li>Unter <b>OAuth-Zustimmungsbildschirm</b> „Extern“ wählen, App-Name eintragen, dich selbst als <b>Testnutzer</b> hinzufügen.</li>
-          <li>Unter <b>Anmeldedaten → OAuth-Client-ID → Webanwendung</b> bei „Autorisierte JavaScript-Quellen“ die Adresse dieser App eintragen: <code>${esc(location.origin)}</code></li>
-          <li>Die erzeugte Client-ID hier einfügen und verbinden.</li>
-        </ol></details>
+    <div class="pagehead" style="margin:0"><h1>Sichern &amp; Laden</h1></div>
+    <p class="muted" style="margin:0;max-width:65ch">Die App speichert alles nur auf diesem Gerät. Um Daten zwischen iPhone, Tablet und PC zu übertragen, sicherst du die zwei Dateien, lädst sie auf Google Drive hoch und lädst sie auf dem anderen Gerät wieder in die App.</p>
+    <section class="panel" style="display:grid;gap:12px"><h2>1 · Sichern</h2>
+      <div style="display:grid;gap:4px;font-size:14px"><div><code>${FILE_PAINTS}</code> · <span class="mono">${S.paints.length}</span> ${S.paints.length===1?"Farbe":"Farben"} · ${state(dF)}</div><div><code>${FILE_RECIPES}</code> · <span class="mono">${S.recipes.length}</span> ${S.recipes.length===1?"Rezept":"Rezepte"} · ${state(dR)}</div>
+      ${last?`<div class="muted">Zuletzt gesichert oder geladen: ${new Date(last).toLocaleString("de-AT",{dateStyle:"medium",timeStyle:"short"})}</div>`:""}</div>
+      <div class="row"><button class="btn primary" data-action="exportBoth">Beide Dateien sichern</button><button class="btn" data-action="exportPaints">Nur Farben</button><button class="btn" data-action="exportRecipes">Nur Rezepte</button></div>
     </section>
-    <section class="panel" style="display:grid;gap:12px"><h2>Sicherung</h2>
-      <p class="muted" style="margin:0">Exportiert beide Listen als JSON-Datei, im selben Format wie auf Drive.</p>
-      <div class="row"><button class="btn" data-action="export">JSON exportieren</button><span class="btn filebtn">JSON importieren<input type="file" accept="application/json,.json" id="imp"></span></div>
+    <section class="panel" style="display:grid;gap:12px"><h2>2 · Laden</h2>
+      <p class="muted" style="margin:0">Wähle eine oder beide Dateien aus. Nichts wird überschrieben: Die App führt die Dateien mit dem Stand auf diesem Gerät zusammen, pro Farbe und Rezept gewinnt die neuere Änderung.</p>
+      <div class="row"><span class="btn primary filebtn">Dateien laden<input type="file" accept="application/json,.json" multiple id="imp"></span></div>
     </section>
-    <section class="panel" style="display:grid;gap:8px"><h2>Auf dem Handy als App</h2>
+    <section class="panel" style="display:grid;gap:10px"><h2>So kommen die Dateien auf Google Drive</h2>
+      <h3>iPhone &amp; iPad</h3>
+      <ol><li>„Beide Dateien sichern“ öffnet das Teilen-Menü. Wähle <b>Drive</b> (Google-Drive-App) oder <b>In Dateien sichern → Google Drive</b>.</li>
+        <li>Zum Laden auf „Dateien laden“ tippen, dann <b>Durchsuchen → Google Drive</b> und die Dateien auswählen.</li></ol>
+      <h3>PC</h3>
+      <ol><li>Die Dateien landen im Download-Ordner. Zieh sie auf <b>drive.google.com</b> in deinen Ordner. Fragt Drive nach, wähle <b>Vorhandene Datei aktualisieren</b>.</li>
+        <li>Mit „Google Drive für Desktop“ geht es ohne Hochladen: Stell den Download-Ordner des Browsers auf den Drive-Ordner um.</li>
+        <li>Zum Laden die Dateien aus Drive herunterladen und über „Dateien laden“ auswählen.</li></ol>
+      <p class="muted" style="margin:0;font-size:14px">Liegen in Drive Duplikate wie <code>farben (1).json</code>, nimm die neueste Datei und lösche die alten. Lädst du versehentlich eine ältere, schadet das nicht: Neuere Änderungen auf dem Gerät bleiben erhalten.</p>
+    </section>
+    <section class="panel" style="display:grid;gap:8px"><h2>Als App auf dem Startbildschirm</h2>
       <p class="muted" style="margin:0">iPhone/iPad: in Safari auf Teilen → „Zum Home-Bildschirm“. Android/PC (Chrome/Edge): Menü → „App installieren“ bzw. „Zum Startbildschirm“.</p>
     </section></div>`;
-  const c=$("#cid"); if(c && !GOOGLE_CLIENT_ID) c.onchange=e=>{ ls.set("fr.clientId",e.target.value.trim()); Sync.client=null; };
-  $("#imp").onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
-    try{ const d=JSON.parse(await f.text());
-      const take=(obj)=>{ if(obj?.hersteller){ const p=paintsFromFile(obj); const m=merge(S.paints,S.paintDel,p.list,p.del); S.paints=m.list; S.paintDel=m.del; }
-        if(obj?.rezepte){ const p=recipesFromFile(obj); const m=merge(S.recipes,S.recipeDel,p.list,p.del); S.recipes=m.list; S.recipeDel=m.del; } };
-      take(d.farben||d); take(d.rezepte?.rezepte?d.rezepte:d); changed(); toast("Import abgeschlossen");
-    }catch(err){ toast("Die Datei ist kein gültiges Farbregal-JSON."); } };
-}
-function exportJson(){
-  const blob=new Blob([JSON.stringify({farben:paintsToFile(),rezepte:recipesToFile()},null,1)],{type:"application/json"});
-  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`farbregal-${new Date().toISOString().slice(0,10)}.json`; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  $("#imp").onchange=e=>{ const fl=[...e.target.files]; e.target.value=""; if(fl.length) importFiles(fl); };
 }
 
 /* ---------- Navigation & Ereignisse ---------- */
@@ -1014,10 +983,9 @@ document.addEventListener("click", e=>{
     case "addTextMat": stepAt(path).materialien.push({art:"text",text:""}); renderEditor(); { const ins=$$(`#view input[data-path="${el.dataset.path}"][data-mtext]`); ins.at(-1)?.focus(); } break;
     case "delMat": stepAt(path).materialien.splice(Number(el.dataset.mi),1); renderEditor(); break;
     case "delImg": stepAt(path).bild=""; renderEditor(); break;
-    case "connect": if(!Sync.clientId()){ toast("Bitte zuerst die Client-ID eintragen."); break; } Sync.client=null; Sync.run(true).then(render); break;
-    case "syncNow": Sync.run(true); break;
-    case "disconnect": Sync.disconnect(); render(); break;
-    case "export": exportJson(); break;
+    case "exportBoth": exportFiles(["farben","rezepte"]); break;
+    case "exportPaints": exportFiles(["farben"]); break;
+    case "exportRecipes": exportFiles(["rezepte"]); break;
   }
 });
 
@@ -1028,7 +996,7 @@ document.addEventListener("click", e=>{
   if(p){ S.paints=p.list||[]; S.paintDel=p.del||{}; }
   if(r){ S.recipes=r.list||[]; S.recipeDel=r.del||{}; }
   render();
-  if(Sync.clientId() && ls.get("fr.connected",false)){ Sync.status("busy","Verbinde …"); Sync.run(); }
+  Backup.status();
 })();
 </script>
 </body>
