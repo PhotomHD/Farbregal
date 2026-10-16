@@ -328,17 +328,26 @@ dialog::backdrop{background:rgb(10 12 16 / .55)}
 <dialog id="dlgScan"><div class="dlg">
   <header><h2>Barcode scannen</h2><button type="button" class="btn ghost iconbtn" data-close aria-label="Schließen">✕</button></header>
   <div class="body">
-    <div id="reader"></div>
+    <div class="row" style="flex-wrap:nowrap;align-items:stretch">
+      <span class="btn primary filebtn" style="flex:1">Foto vom Barcode aufnehmen<input type="file" accept="image/*" capture="environment" id="scanFile"></span>
+    </div>
+    <p class="muted" style="margin:-6px 0 0;font-size:13px">Am zuverlässigsten bei kleinen Barcodes: Die Foto-Kamera stellt schärfer und näher scharf als das Live-Bild. Aus ca. 10–15 cm fotografieren, der Barcode muss nicht mittig oder gerade sein.</p>
+    <div id="scanBusy" class="notice" hidden>Suche Barcode im Foto …</div>
     <div class="notice err" id="scanErr" hidden></div>
     <div id="scanResult" hidden></div>
+    <div id="liveWrap" style="display:grid;gap:8px">
+      <div id="reader"></div>
+      <div class="row" id="camCtl" hidden>
+        <label class="f" id="zoomWrap" style="flex:1" hidden>Zoom <span class="mono" id="zoomVal"></span><input type="range" id="zoom" step="0.1"></label>
+        <button class="btn sm" type="button" id="torchBtn" hidden>Licht an</button>
+      </div>
+      <p class="muted" style="margin:0;font-size:13px">Live-Scan: Barcode waagrecht durch die Mitte des Rahmens, nicht zu nah ran (sonst unscharf), lieber zoomen.</p>
+    </div>
     <div class="row" style="flex-wrap:nowrap">
       <input type="text" id="scanManual" inputmode="numeric" placeholder="Barcode eintippen" class="mono">
       <button class="btn" type="button" id="scanManualBtn">Übernehmen</button>
     </div>
-    <div class="row">
-      <span class="btn filebtn sm">Foto vom Barcode wählen<input type="file" accept="image/*" id="scanFile"></span>
-      <span class="muted" style="font-size:13px">falls die Live-Kamera nicht startet</span>
-    </div>
+    <div id="scanTmp" hidden></div>
   </div>
 </div></dialog>
 
@@ -600,15 +609,21 @@ function scanFormats(){
 }
 async function openScan(target=null){
   scanTarget=target;
-  $("#scanErr").hidden=true; $("#scanResult").hidden=true; $("#scanManual").value=""; $("#reader").hidden=false;
+  $("#scanErr").hidden=true; $("#scanResult").hidden=true; $("#scanBusy").hidden=true; $("#scanManual").value=""; $("#liveWrap").hidden=false; $("#camCtl").hidden=true;
   $("#dlgScan").showModal();
   if(!window.Html5Qrcode){ showScanErr("Der Scanner konnte nicht geladen werden: Die Datei html5-qrcode.min.js fehlt neben index.html. Bis dahin kannst du den Barcode unten eintippen."); return; }
   try{
     qr = new Html5Qrcode("reader", {formatsToSupport:scanFormats(), verbose:false, experimentalFeatures:{useBarCodeDetectorIfSupported:true}});
-    await qr.start({facingMode:"environment"}, {fps:12, qrbox:(w,h)=>({width:Math.min(300,w*0.85), height:Math.min(150,h*0.5)})}, code=>gotCode(code), ()=>{});
+    // Hohe Auflösung anfordern: Bei kleinen Barcodes sind sonst die Striche zu wenige Pixel breit
+    await qr.start({facingMode:"environment"}, {
+      fps:15,
+      qrbox:(w,h)=>({width:Math.floor(w*0.9), height:Math.floor(Math.max(80,h*0.45))}),
+      videoConstraints:{facingMode:"environment", width:{ideal:1920}, height:{ideal:1080}, advanced:[{focusMode:"continuous"}]}
+    }, code=>gotCode(code), ()=>{});
+    setupCamControls();
   }catch(err){
-    showScanErr("Die Kamera ließ sich nicht starten. Erlaube den Kamerazugriff im Browser (nur über https möglich) oder tippe den Barcode ein.");
-    $("#reader").hidden=true;
+    showScanErr("Die Live-Kamera ließ sich nicht starten. Nimm oben ein Foto vom Barcode auf oder tippe ihn ein.");
+    $("#liveWrap").hidden=true;
   }
 }
 function showScanErr(m){ const e=$("#scanErr"); e.textContent=m; e.hidden=false; }
@@ -616,16 +631,60 @@ async function stopScan(){ if(qr){ try{ if(qr.isScanning) await qr.stop(); qr.cl
 $("#dlgScan").addEventListener("close", stopScan);
 $("#scanManualBtn").onclick=()=>{ const c=$("#scanManual").value.trim(); if(c) gotCode(c); };
 $("#scanManual").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); $("#scanManualBtn").click(); }});
+function setupCamControls(){
+  let caps={}; try{ caps=qr.getRunningTrackCapabilities()||{}; }catch(e){}
+  const z=$("#zoom"), t=$("#torchBtn");
+  if(caps.zoom && caps.zoom.max>caps.zoom.min){
+    z.min=caps.zoom.min; z.max=caps.zoom.max; z.step=caps.zoom.step||0.1;
+    const start=Math.min(caps.zoom.max, Math.max(caps.zoom.min, 2));
+    z.value=start; $("#zoomVal").textContent=Number(start).toFixed(1)+"×";
+    qr.applyVideoConstraints({advanced:[{zoom:start}]}).catch(()=>{});
+    z.oninput=()=>{ $("#zoomVal").textContent=Number(z.value).toFixed(1)+"×"; qr?.applyVideoConstraints({advanced:[{zoom:Number(z.value)}]}).catch(()=>{}); };
+    $("#zoomWrap").hidden=false;
+  } else $("#zoomWrap").hidden=true;
+  if(caps.torch){
+    let on=false; t.textContent="Licht an";
+    t.onclick=()=>{ on=!on; qr?.applyVideoConstraints({advanced:[{torch:on}]}).then(()=>t.textContent=on?"Licht aus":"Licht an").catch(()=>{}); };
+    t.hidden=false;
+  } else t.hidden=true;
+  $("#camCtl").hidden = $("#zoomWrap").hidden && t.hidden;
+}
+/* Fotos: Der Decoder liest Strichcodes nur entlang weniger Zeilen nahe der Bildmitte und nur waagrecht.
+   Deshalb wird das Foto gedreht und in überlappende Streifen geschnitten, bis ein Streifen den Code trifft. */
+function loadImg(file){ return new Promise((res,rej)=>{ const u=URL.createObjectURL(file), i=new Image(); i.onload=()=>{URL.revokeObjectURL(u);res(i);}; i.onerror=()=>{URL.revokeObjectURL(u);rej(new Error("img"));}; i.src=u; }); }
+function variantFile(img, rot, band, maxSide){
+  const k=Math.min(1, maxSide/Math.max(img.naturalWidth,img.naturalHeight));
+  const w=Math.round(img.naturalWidth*k), h=Math.round(img.naturalHeight*k);
+  const rw = rot%180 ? h : w, rh = rot%180 ? w : h;
+  const y0 = band ? Math.floor(rh*band[0]) : 0, bh = band ? Math.ceil(rh*(band[1]-band[0])) : rh;
+  const c=document.createElement("canvas"); c.width=rw; c.height=bh;
+  const g=c.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,rw,bh);
+  g.translate(rw/2, rh/2 - y0); g.rotate(rot*Math.PI/180); g.drawImage(img, -w/2, -h/2, w, h);
+  return new Promise(res=>c.toBlob(b=>res(new File([b],"v.jpg",{type:"image/jpeg"})),"image/jpeg",0.92));
+}
+async function decodePhoto(file){
+  const img=await loadImg(file);
+  const tmp=new Html5Qrcode("scanTmp",{formatsToSupport:scanFormats(),verbose:false});
+  const bands=[null,[0,.4],[.2,.6],[.4,.8],[.6,1],[0,.25],[.25,.5],[.5,.75],[.75,1]];
+  try{
+    for(const size of [2400,1400]) for(const rot of [0,90]) for(const band of bands){
+      const f=await variantFile(img,rot,band,size);
+      try{ return await tmp.scanFile(f,false); }catch(e){}
+    }
+  } finally { try{ tmp.clear(); }catch(e){} }
+  throw new Error("nocode");
+}
 $("#scanFile").onchange=async e=>{
-  const file=e.target.files[0]; e.target.value=""; if(!file||!window.Html5Qrcode) return;
-  await stopScan();
-  try{ const tmp=new Html5Qrcode("reader",{formatsToSupport:scanFormats(),verbose:false}); const code=await tmp.scanFile(file,false); tmp.clear(); gotCode(code); }
-  catch(err){ showScanErr("Auf dem Foto wurde kein Barcode erkannt. Versuch es näher und schärfer, oder tippe ihn ein."); }
+  const file=e.target.files[0]; e.target.value=""; if(!file) return;
+  if(!window.Html5Qrcode){ showScanErr("Der Scanner konnte nicht geladen werden: Die Datei html5-qrcode.min.js fehlt neben der App."); return; }
+  await stopScan(); $("#liveWrap").hidden=true; $("#scanErr").hidden=true; $("#scanResult").hidden=true; $("#scanBusy").hidden=false;
+  try{ const code=await decodePhoto(file); $("#scanBusy").hidden=true; gotCode(code); }
+  catch(err){ $("#scanBusy").hidden=true; showScanErr("Auf dem Foto wurde kein Barcode erkannt. Achte darauf, dass die Striche scharf sind (etwas mehr Abstand hilft), und versuch es nochmal – oder tippe die Nummer unter dem Barcode ein."); }
 };
 async function gotCode(code){
   code=String(code).trim();
   if(navigator.vibrate) navigator.vibrate(60);
-  await stopScan(); $("#reader").hidden=true; $("#scanErr").hidden=true;
+  await stopScan(); $("#liveWrap").hidden=true; $("#scanErr").hidden=true;
   if(scanTarget==="form"){ $("#dlgScan").close(); $("#pBarcode").value=code; toast("Barcode übernommen"); return; }
   const hit = S.paints.find(p=>p.barcode===code);
   const r=$("#scanResult"); r.hidden=false;
