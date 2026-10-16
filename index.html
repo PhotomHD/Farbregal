@@ -1,0 +1,1035 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Farbregal">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Farbregal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+/* Layout: Werkbank-App. Kopfleiste + Ansicht; am Handy unten eine Tab-Leiste und ein Scan-Knopf.
+   Farben: kühles Tinten-Grau als Grund, Messing (wie Metallicfarbe) als einziger Akzent. */
+:root{
+  --bg:#e9ecef; --surface:#ffffff; --surface-2:#f4f6f8; --ink:#1a1f27; --ink-2:#4d5664; --line:#d3d8df;
+  --accent:#9a640d; --accent-ink:#ffffff; --accent-soft:#f6ead2;
+  --ok:#2f7d4f; --warn:#b4541c; --danger:#b3261e;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11141a; --surface:#1a1f28; --surface-2:#222833; --ink:#e7eaef; --ink-2:#a3acb9; --line:#2e3542;
+    --accent:#e2aa45; --accent-ink:#1a1306; --accent-soft:#3a2c12;
+    --ok:#5fbf86; --warn:#e58a4f; --danger:#f2766d; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#11141a; --surface:#1a1f28; --surface-2:#222833; --ink:#e7eaef; --ink-2:#a3acb9; --line:#2e3542;
+  --accent:#e2aa45; --accent-ink:#1a1306; --accent-soft:#3a2c12;
+  --ok:#5fbf86; --warn:#e58a4f; --danger:#f2766d; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--body);-webkit-text-size-adjust:100%;
+  padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+@media (min-width:820px){body{padding-bottom:40px}}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--surface)}
+img{max-width:100%;display:block}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* Kopf */
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--surface);border-bottom:1px solid var(--line)}
+header.top .wrap{display:flex;align-items:center;gap:16px;padding-block:10px}
+.brand{font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:.02em;text-transform:uppercase;line-height:1;display:flex;align-items:center;gap:10px}
+.brand i{display:inline-flex;gap:3px}
+.brand i b{width:7px;height:20px;border-radius:2px 2px 3px 3px;display:block}
+nav.tabs{display:none;gap:4px;margin-left:12px}
+@media (min-width:820px){nav.tabs{display:flex}}
+nav.tabs button,nav.bottom button{background:none;border:0;cursor:pointer;font-family:var(--display);font-weight:600;font-size:18px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2);padding:6px 12px;border-radius:8px}
+nav.tabs button[aria-current="true"]{color:var(--ink);background:var(--surface-2)}
+.spacer{flex:1}
+.sync{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:5px 12px 5px 10px;font-size:13px;cursor:pointer;white-space:nowrap;max-width:52vw;overflow:hidden;text-overflow:ellipsis}
+.sync .dot{width:8px;height:8px;border-radius:50%;background:var(--ink-2);flex:none}
+.sync[data-s="ok"] .dot{background:var(--ok)}
+.sync[data-s="busy"] .dot{background:var(--accent);animation:pulse 1s infinite}
+.sync[data-s="err"] .dot{background:var(--danger)}
+@keyframes pulse{50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){.sync[data-s="busy"] .dot{animation:none}}
+
+nav.bottom{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);display:flex;justify-content:space-around;
+  padding:6px max(16px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+nav.bottom button{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:14px;padding:6px 14px}
+nav.bottom button svg{width:22px;height:22px}
+nav.bottom button[aria-current="true"]{color:var(--accent)}
+@media (min-width:820px){nav.bottom{display:none}}
+
+main{padding-block:20px}
+h1,h2,h3{font-family:var(--display);font-weight:700;text-transform:uppercase;letter-spacing:.02em;line-height:1.05;margin:0;text-wrap:balance}
+h1{font-size:34px} h2{font-size:24px} h3{font-size:19px}
+.muted{color:var(--ink-2)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* Knöpfe & Felder */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:9px 14px;cursor:pointer;font-weight:700;font-size:14px;line-height:1.1;text-decoration:none;white-space:nowrap}
+.btn:hover{border-color:var(--ink-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent;border-color:transparent}
+.btn.danger{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--line))}
+.btn.sm{padding:6px 10px;font-size:13px}
+.btn svg{width:18px;height:18px;flex:none}
+.iconbtn{width:34px;height:34px;padding:0}
+label.f{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:700;color:var(--ink-2);min-width:0}
+input[type=text],input[type=number],input[type=url],input[type=search],select,textarea{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 11px;font-size:16px;font-weight:400;color:var(--ink);min-width:0}
+textarea{resize:vertical;min-height:70px}
+input[type=color]{width:46px;height:42px;border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:3px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:560px){.grid2{grid-template-columns:1fr}}
+
+/* Übersicht Farben */
+.pagehead{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.pagehead .actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.stats{font-size:13px}
+.filters{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px;margin-bottom:14px}
+@media (max-width:820px){.filters{grid-template-columns:1fr 1fr}.filters .q{grid-column:1/-1}}
+.chiprow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 10px;font-size:13px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.group{margin-bottom:22px}
+.group h2{display:flex;align-items:baseline;gap:10px;margin-bottom:8px;font-size:21px}
+.group h2 small{font-family:var(--body);text-transform:none;font-weight:400;font-size:13px;color:var(--ink-2);letter-spacing:0}
+.plist{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.prow{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 12px;border-top:1px solid var(--line);cursor:pointer}
+.prow:first-child{border-top:0}
+.prow:hover{background:var(--surface-2)}
+.prow.empty{opacity:.55}
+.pot{width:22px;height:28px;border-radius:4px 4px 6px 6px;border:1px solid color-mix(in srgb,var(--ink) 25%,transparent);position:relative;background:var(--sw,#888)}
+.pot::before{content:"";position:absolute;left:3px;right:3px;top:-5px;height:5px;border-radius:2px 2px 0 0;background:var(--ink-2);opacity:.6}
+.pname{font-weight:700;min-width:0;overflow-wrap:anywhere}
+.pmeta{display:flex;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2);margin-top:2px}
+.tag{display:inline-block;border:1px solid var(--line);border-radius:4px;padding:0 6px;font-size:12px;line-height:18px;color:var(--ink-2)}
+.qty{display:flex;align-items:center;gap:4px}
+.qty button{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--surface-2);cursor:pointer;font-size:17px;line-height:1;color:var(--ink)}
+.qty output{min-width:30px;text-align:center;font-family:var(--mono);font-weight:600}
+.emptystate{background:var(--surface);border:1px dashed var(--line);border-radius:var(--r);padding:28px 20px;text-align:center;display:grid;gap:12px;justify-items:center}
+.emptystate p{margin:0;max-width:52ch}
+
+/* FAB */
+.fab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(86px + env(safe-area-inset-bottom,0px));z-index:19;border-radius:999px;padding:14px 18px;box-shadow:0 6px 20px rgb(0 0 0 / .25)}
+@media (min-width:820px){.fab{display:none}}
+
+/* Dialoge */
+dialog{border:0;padding:0;border-radius:14px;background:var(--surface);color:var(--ink);width:min(640px,calc(100vw - 24px));max-height:calc(100dvh - 24px);box-shadow:0 20px 60px rgb(0 0 0 / .35)}
+dialog::backdrop{background:rgb(10 12 16 / .55)}
+.dlg{display:flex;flex-direction:column;max-height:calc(100dvh - 24px)}
+.dlg header{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.dlg header h2{font-size:22px;flex:1}
+.dlg .body{padding:16px;overflow:auto;display:grid;gap:14px}
+.dlg footer{display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--line);justify-content:flex-end}
+.dlg footer .left{margin-right:auto}
+.notice{border-radius:8px;padding:10px 12px;background:var(--accent-soft);font-size:14px}
+.notice.err{background:color-mix(in srgb,var(--danger) 14%,var(--surface));color:var(--ink)}
+#reader{width:100%;border-radius:10px;overflow:hidden;background:#000;min-height:220px}
+#reader video{border-radius:10px}
+
+/* Rezepte */
+.rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.rcard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;cursor:pointer;display:flex;flex-direction:column;text-align:left;padding:0}
+.rcard:hover{border-color:var(--ink-2)}
+.rcover{aspect-ratio:16/9;background:var(--surface-2);display:flex;gap:4px;align-items:flex-end;justify-content:center;padding:14px;max-width:100%}
+.rcover img{width:100%;height:100%;object-fit:cover}
+.rcover.photo{padding:0}
+.rcover .pot{width:24px;height:34px}
+.rcard .info{padding:12px 14px;display:grid;gap:4px}
+.rcard h3{font-size:21px}
+
+.rdetail{display:grid;gap:16px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:none;padding:8px 14px;cursor:pointer;font-weight:700;font-size:13px;color:var(--ink-2)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.viewnote{font-size:13px;color:var(--ink-2);margin-top:-6px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.layout2{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:16px;align-items:start}
+@media (max-width:900px){.layout2{grid-template-columns:1fr}}
+.shop h3{margin-bottom:8px}
+.shop ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.shop li{display:flex;align-items:center;gap:8px;font-size:14px}
+.shop li .pot{width:14px;height:18px}
+.shop li .pot::before{display:none}
+.stock{margin-left:auto;font-size:12px;font-family:var(--mono)}
+.stock.no{color:var(--danger);font-family:var(--body);font-weight:700}
+
+.mchips{display:flex;gap:6px;flex-wrap:wrap}
+.mchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:6px;padding:2px 8px 2px 4px;font-size:13px;background:var(--surface-2)}
+.mchip .sw{width:12px;height:16px;border-radius:2px 2px 3px 3px;background:var(--sw,#888);border:1px solid color-mix(in srgb,var(--ink) 25%,transparent)}
+.mchip.text{padding-left:8px;font-style:italic}
+.mchip.missing{border-color:var(--danger)}
+.mchip.missing::after{content:"fehlt";font-size:11px;color:var(--danger);font-weight:700}
+
+/* Ansicht A: Baum */
+.tree,.tree ul{list-style:none;margin:0;padding:0}
+.tree ul{margin-left:14px;padding-left:16px;border-left:2px solid var(--line)}
+.tree li{position:relative;padding:8px 0 4px}
+.tree ul>li::before{content:"";position:absolute;left:-16px;top:22px;width:12px;border-top:2px solid var(--line)}
+.tnode{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:start}
+.tnum{font-family:var(--mono);font-size:12px;font-weight:600;background:var(--ink);color:var(--bg);border-radius:4px;padding:2px 6px;margin-top:2px}
+.ttext{white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:6px}
+.tthumb{width:64px;height:64px;border-radius:6px;object-fit:cover;cursor:zoom-in}
+
+/* Ansicht B: Ablauf */
+.flow{display:grid;gap:14px}
+.fstep{display:grid;grid-template-columns:46px minmax(0,1fr);gap:14px}
+.fnum{font-family:var(--display);font-weight:700;font-size:30px;line-height:1;color:var(--accent);text-align:right;padding-top:2px}
+.fbody{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.fbody .ftext{padding:12px 14px;display:grid;gap:8px}
+.fbody .fimg{width:100%;max-height:340px;object-fit:cover;cursor:zoom-in}
+.fsub{margin:0 14px 14px;display:grid;gap:10px;border-left:3px solid var(--accent-soft);padding-left:12px}
+.fsub .fstep{grid-template-columns:40px minmax(0,1fr)}
+.fsub .fnum{font-size:20px;color:var(--ink-2)}
+.fsub .fbody{background:var(--surface-2)}
+
+/* Ansicht C: Malmodus */
+.paintmode{display:grid;gap:12px}
+.pmcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}
+@media (max-width:720px){.pmcard{grid-template-columns:1fr}}
+.pmimg{background:var(--surface-2);min-height:220px;display:flex;align-items:center;justify-content:center;color:var(--ink-2);font-size:13px}
+.pmimg img{width:100%;height:100%;max-height:420px;object-fit:cover}
+.pmtext{padding:18px;display:grid;gap:12px;align-content:start}
+.crumb{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);font-weight:700}
+.pmtext .big{font-size:19px;white-space:pre-wrap;overflow-wrap:anywhere}
+.pmnav{display:flex;align-items:center;gap:10px}
+.dots{display:flex;gap:5px;flex-wrap:wrap;flex:1;justify-content:center}
+.dots button{width:9px;height:9px;border-radius:50%;border:0;background:var(--line);padding:0;cursor:pointer}
+.dots button.sub{width:6px;height:6px;margin-top:1.5px}
+.dots button[aria-current="true"]{background:var(--accent)}
+
+/* Editor */
+.ed{display:grid;gap:12px}
+.estep{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:12px;display:grid;gap:10px}
+.estep .estep{background:var(--surface-2)}
+.estep>.ehead{display:flex;align-items:center;gap:8px}
+.estep>.ehead .tnum{margin:0}
+.estep>.ehead .grow{flex:1}
+.esubs{display:grid;gap:10px;margin-left:8px;padding-left:12px;border-left:2px solid var(--line)}
+.eimg{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.eimg img{width:90px;height:90px;object-fit:cover;border-radius:8px}
+.mlist{display:grid;gap:6px}
+.mitem{display:flex;gap:6px;align-items:center}
+.mitem .mchip{flex:1;min-width:0}
+.mitem input{flex:1}
+.err-step{border-color:var(--danger)}
+.filebtn{position:relative;overflow:hidden}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+
+.picklist{display:grid;gap:2px;max-height:50vh;overflow:auto}
+.pick{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px;border-radius:8px;border:0;background:none;text-align:left;cursor:pointer}
+.pick:hover{background:var(--surface-2)}
+.pick .pot{width:16px;height:21px}
+.pick .pot::before{display:none}
+
+.lightbox{width:min(1000px,calc(100vw - 24px))}
+.lightbox img{width:100%;max-height:85dvh;object-fit:contain;background:#000}
+
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;z-index:50;max-width:calc(100vw - 32px);box-shadow:0 6px 20px rgb(0 0 0 / .3)}
+@media (min-width:820px){.toast{bottom:28px}}
+.settings{display:grid;gap:16px;max-width:760px}
+.settings ol{margin:0;padding-left:20px;display:grid;gap:6px}
+.settings code{font-family:var(--mono);font-size:13px;background:var(--surface-2);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><i aria-hidden="true"><b style="background:#8e1b1b"></b><b style="background:#c9a227"></b><b style="background:#2d4f7c"></b></i>Farbregal</div>
+    <nav class="tabs" aria-label="Bereiche">
+      <button data-go="farben">Farben</button>
+      <button data-go="rezepte">Rezepte</button>
+      <button data-go="einstellungen">Sync &amp; Daten</button>
+    </nav>
+    <span class="spacer"></span>
+    <button class="sync" id="syncPill" data-s="off" title="Google Drive"><span class="dot"></span><span id="syncText">Nur lokal</span></button>
+  </div>
+</header>
+
+<main class="wrap" id="view"></main>
+
+<button class="btn primary fab" id="fabScan" data-action="scan" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3M7 8v8M10 8v8M13 8v8M17 8v8"/></svg>Scannen
+</button>
+
+<nav class="bottom" aria-label="Bereiche">
+  <button data-go="farben"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="7" width="6" height="13" rx="1.5"/><rect x="14" y="7" width="6" height="13" rx="1.5"/><path d="M5 7V4h4v3M15 7V4h4v3"/></svg>Farben</button>
+  <button data-go="rezepte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h11l3 3v13H5z"/><path d="M8 10h8M8 14h8M8 18h5"/></svg>Rezepte</button>
+  <button data-go="einstellungen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 18a4 4 0 0 1-.6-7.96A6 6 0 0 1 18 9.5a4 4 0 0 1-1 8.5z"/></svg>Sync</button>
+</nav>
+
+<!-- Farbe bearbeiten -->
+<dialog id="dlgPaint"><form class="dlg" method="dialog" id="paintForm" novalidate>
+  <header><h2 id="paintTitle">Neue Farbe</h2><button type="button" class="btn ghost iconbtn" data-close aria-label="Schließen">✕</button></header>
+  <div class="body">
+    <div class="notice" id="paintNotice" hidden></div>
+    <div class="grid2">
+      <label class="f">Hersteller
+        <input type="text" id="pHersteller" list="dlHersteller" required autocomplete="off">
+      </label>
+      <label class="f">Farbtyp
+        <input type="text" id="pTyp" list="dlTypen" autocomplete="off" placeholder="z. B. Base, Layer, Shade">
+      </label>
+    </div>
+    <div class="grid2">
+      <label class="f">Name der Farbe
+        <input type="text" id="pName" required autocomplete="off">
+      </label>
+      <label class="f">Nummer <span class="muted" style="font-weight:400">(falls vorhanden, z. B. 70.950)</span>
+        <input type="text" id="pNummer" autocomplete="off" class="mono">
+      </label>
+    </div>
+    <div class="grid2">
+      <label class="f">Menge (Töpfe / Flaschen)
+        <div class="qty"><button type="button" data-step="-1" aria-label="Weniger">−</button><input type="number" id="pMenge" min="0" step="1" value="1" class="mono" style="text-align:center"><button type="button" data-step="1" aria-label="Mehr">+</button></div>
+      </label>
+      <label class="f">Farbton (optional, für die Vorschau)
+        <div class="row"><input type="color" id="pFarbcode" value="#888888"><span class="muted mono" id="pFarbcodeTxt">#888888</span></div>
+      </label>
+    </div>
+    <label class="f">Barcode
+      <div class="row" style="flex-wrap:nowrap"><input type="text" id="pBarcode" inputmode="numeric" autocomplete="off" class="mono"><button type="button" class="btn" data-action="scanIntoForm">Scannen</button></div>
+    </label>
+    <label class="f">Link zur Herstellerseite
+      <div class="row" style="flex-wrap:nowrap"><input type="url" id="pLink" placeholder="https://…" autocomplete="off"><a class="btn" id="pLinkSearch" target="_blank" rel="noopener">Suchen</a></div>
+    </label>
+  </div>
+  <footer>
+    <span class="left" id="paintDelWrap">
+      <button type="button" class="btn danger" id="paintDel">Löschen</button>
+      <button type="button" class="btn danger" id="paintDelConfirm" hidden>Wirklich löschen</button>
+    </span>
+    <button type="button" class="btn" data-close>Abbrechen</button>
+    <button type="submit" class="btn primary">Speichern</button>
+  </footer>
+</form></dialog>
+
+<!-- Scanner -->
+<dialog id="dlgScan"><div class="dlg">
+  <header><h2>Barcode scannen</h2><button type="button" class="btn ghost iconbtn" data-close aria-label="Schließen">✕</button></header>
+  <div class="body">
+    <div id="reader"></div>
+    <div class="notice err" id="scanErr" hidden></div>
+    <div id="scanResult" hidden></div>
+    <div class="row" style="flex-wrap:nowrap">
+      <input type="text" id="scanManual" inputmode="numeric" placeholder="Barcode eintippen" class="mono">
+      <button class="btn" type="button" id="scanManualBtn">Übernehmen</button>
+    </div>
+    <div class="row">
+      <span class="btn filebtn sm">Foto vom Barcode wählen<input type="file" accept="image/*" id="scanFile"></span>
+      <span class="muted" style="font-size:13px">falls die Live-Kamera nicht startet</span>
+    </div>
+  </div>
+</div></dialog>
+
+<!-- Farbe für Rezept wählen -->
+<dialog id="dlgPick"><div class="dlg">
+  <header><h2>Farbe aus dem Inventar</h2><button type="button" class="btn ghost iconbtn" data-close aria-label="Schließen">✕</button></header>
+  <div class="body">
+    <input type="search" id="pickQ" placeholder="Name, Nummer oder Hersteller">
+    <div class="picklist" id="pickList"></div>
+  </div>
+</div></dialog>
+
+<dialog id="dlgImg" class="lightbox"><div class="dlg">
+  <header><h2>Bild</h2><button type="button" class="btn ghost iconbtn" data-close aria-label="Schließen">✕</button></header>
+  <img id="imgBig" alt="">
+</div></dialog>
+
+<datalist id="dlHersteller"></datalist>
+<datalist id="dlTypen"></datalist>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+"use strict";
+/* ============================================================
+   KONFIGURATION
+   Trage hier die OAuth-Client-ID aus der Google Cloud Console ein
+   (oder in der App unter "Sync & Daten").
+   ============================================================ */
+const GOOGLE_CLIENT_ID = "";
+const DRIVE_FOLDER = "Farbregal";
+const FILE_PAINTS = "farben.json";
+const FILE_RECIPES = "rezepte.json";
+
+/* Bekannte Hersteller und ihre Farbtypen (Freitext bleibt immer möglich) */
+const MAKERS = {
+  "Citadel": {site:"games-workshop.com", typen:["Base","Layer","Shade","Contrast","Dry","Technical","Air","Spray","Texture"]},
+  "Vallejo": {site:"acrylicosvallejo.com", typen:["Model Color","Game Color","Model Air","Game Air","Xpress Color","Mecha Color","Metal Color","Panzer Aces","Game Color Wash","Model Wash","Game Color Ink","Surface Primer","Pigments","Technical","True Metallic Metal","Fluorescent"]},
+  "AK Interactive": {site:"ak-interactive.com", typen:["3rd Gen Standard","3rd Gen Intense","3rd Gen Metallic","3rd Gen Pastel","3rd Gen Ink","3rd Gen Fluorescent","Quick Gen","Real Colors","Xtreme Metal","Wash","Enamel","Primer"]},
+  "The Army Painter": {site:"thearmypainter.com", typen:["Warpaints Fanatic","Fanatic Wash","Fanatic Metallic","Speedpaint 2.0","Warpaints Air","Colour Primer Spray","Effects"]},
+  "Scale75": {site:"scale75.com", typen:["Scalecolor","Fantasy & Games","Metal n' Alchemy","Instant Colors","Inktensity","Artist","Primer"]},
+  "Pro Acryl": {site:"monumenthobbies.com", typen:["Standard","Metallic","Transparent","Wash","Primer"]},
+  "Two Thin Coats": {site:"", typen:["Base","Midtone","Highlight","Wash","Metallic"]}
+};
+
+/* ---------- Hilfen ---------- */
+const $ = (s, el=document) => el.querySelector(s);
+const $$ = (s, el=document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+Math.random().toString(36).slice(2));
+const now = () => new Date().toISOString();
+const norm = s => String(s||"").trim().toLowerCase();
+const ls = {
+  get(k, d=null){ try{ const v = localStorage.getItem(k); return v===null ? d : JSON.parse(v);}catch(e){return d;} },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+let toastT;
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true, 2800); }
+
+/* ---------- Lokaler Speicher (IndexedDB) ---------- */
+const idb = {
+  db:null,
+  open(){ return new Promise((res)=>{ try{ const r=indexedDB.open("farbregal",1);
+      r.onupgradeneeded=()=>r.result.createObjectStore("kv");
+      r.onsuccess=()=>{this.db=r.result;res();}; r.onerror=()=>res(); }catch(e){res();} }); },
+  get(k){ return new Promise(res=>{ if(!this.db) return res(null); try{ const r=this.db.transaction("kv").objectStore("kv").get(k); r.onsuccess=()=>res(r.result??null); r.onerror=()=>res(null);}catch(e){res(null);} }); },
+  set(k,v){ return new Promise(res=>{ if(!this.db) return res(); try{ const tx=this.db.transaction("kv","readwrite"); tx.objectStore("kv").put(v,k); tx.oncomplete=()=>res(); tx.onerror=()=>res();}catch(e){res();} }); }
+};
+
+/* ---------- Zustand ---------- */
+const S = {
+  paints: [],       // flach: {id, hersteller, name, nummer, typ, menge, barcode, link, farbcode, geaendert}
+  paintDel: {},     // id -> Zeitpunkt der Löschung
+  recipes: [],      // {id, name, notiz, geaendert, schritte:[{id,text,materialien:[],bild,schritte:[]}]}
+  recipeDel: {},
+  view: "farben",
+  recipeId: null, recipeMode: ls.get("fr.mode","flow"), editing: null,
+  filter: {q:"", hersteller:"", typ:"", sort:"hersteller"}
+};
+
+/* JSON-Format auf Google Drive: nach Hersteller gruppiert */
+function paintsToFile(){
+  const by = {};
+  for(const p of S.paints){ (by[p.hersteller] ||= []).push(p); }
+  return {
+    format: "farbregal-farben/1",
+    aktualisiert: now(),
+    hersteller: Object.keys(by).sort((a,b)=>a.localeCompare(b,"de")).map(h => ({
+      name: h,
+      farben: by[h].sort((a,b)=>a.name.localeCompare(b.name,"de")).map(p => ({
+        id:p.id, name:p.name, nummer:p.nummer||"", typ:p.typ||"", menge:p.menge, barcode:p.barcode||"", link:p.link||"", farbcode:p.farbcode||"", geaendert:p.geaendert
+      }))
+    })),
+    geloescht: Object.entries(S.paintDel).map(([id,zeit])=>({id,zeit}))
+  };
+}
+function paintsFromFile(f){
+  const list=[], del={};
+  for(const h of (f?.hersteller||[])) for(const p of (h.farben||[])) list.push({...p, hersteller:h.name, menge:Number(p.menge)||0});
+  for(const d of (f?.geloescht||[])) del[d.id]=d.zeit;
+  return {list, del};
+}
+function recipesToFile(){
+  return { format:"farbregal-rezepte/1", aktualisiert: now(), rezepte: S.recipes, geloescht: Object.entries(S.recipeDel).map(([id,zeit])=>({id,zeit})) };
+}
+function recipesFromFile(f){
+  const del={}; for(const d of (f?.geloescht||[])) del[d.id]=d.zeit;
+  return {list: f?.rezepte||[], del};
+}
+/* Zusammenführen: pro Eintrag gewinnt die neuere Änderung; Löschungen bleiben als Grabstein erhalten */
+function merge(localList, localDel, remoteList, remoteDel){
+  const del = {...localDel};
+  for(const [id,t] of Object.entries(remoteDel)) if(!del[id] || del[id]<t) del[id]=t;
+  const map = new Map();
+  for(const it of [...localList, ...remoteList]){
+    const cur = map.get(it.id);
+    if(!cur || (it.geaendert||"") > (cur.geaendert||"")) map.set(it.id, it);
+  }
+  const list = [...map.values()].filter(it => !(del[it.id] && del[it.id] >= (it.geaendert||"")));
+  return {list, del};
+}
+
+async function persist(){
+  await idb.set("paints", {list:S.paints, del:S.paintDel});
+  await idb.set("recipes", {list:S.recipes, del:S.recipeDel});
+}
+let saveT;
+function changed(){ persist(); clearTimeout(saveT); saveT=setTimeout(()=>Sync.run(), 1500); }
+
+/* ---------- Farben: Logik ---------- */
+function findDuplicate(p, exceptId){
+  return S.paints.find(x => x.id!==exceptId && (
+    (p.barcode && x.barcode && x.barcode===p.barcode) ||
+    (norm(x.hersteller)===norm(p.hersteller) && norm(x.name)===norm(p.name) && norm(x.nummer)===norm(p.nummer))
+  ));
+}
+function paintById(id){ return S.paints.find(p=>p.id===id); }
+function paintLabel(p){ return `${p.hersteller} · ${p.name}${p.nummer?` (${p.nummer})`:""}`; }
+function setQty(id, n){ const p=paintById(id); if(!p) return; p.menge=Math.max(0,n); p.geaendert=now(); changed(); }
+function searchUrl(h,n,nr){
+  const site = MAKERS[h]?.site;
+  const q = `${site?`site:${site} `:""}${h} ${n} ${nr||""}`.trim();
+  return "https://www.google.com/search?q="+encodeURIComponent(q);
+}
+
+/* ---------- Ansicht: Farben ---------- */
+function allMakers(){ return [...new Set([...Object.keys(MAKERS), ...S.paints.map(p=>p.hersteller)])].sort((a,b)=>a.localeCompare(b,"de")); }
+function typesFor(h){ return [...new Set([...(MAKERS[h]?.typen||[]), ...S.paints.filter(p=>!h||p.hersteller===h).map(p=>p.typ).filter(Boolean)])]; }
+
+function renderPaints(){
+  const f=S.filter, v=$("#view");
+  const makers=[...new Set(S.paints.map(p=>p.hersteller))].sort((a,b)=>a.localeCompare(b,"de"));
+  const types=[...new Set(S.paints.filter(p=>!f.hersteller||p.hersteller===f.hersteller).map(p=>p.typ).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"de"));
+  const q=norm(f.q);
+  let list=S.paints.filter(p => (!f.hersteller||p.hersteller===f.hersteller) && (!f.typ||p.typ===f.typ) &&
+    (!q || norm(p.name).includes(q) || norm(p.nummer).includes(q) || norm(p.barcode).includes(q)));
+  const cmp = {
+    name:(a,b)=>a.name.localeCompare(b.name,"de"),
+    hersteller:(a,b)=>a.hersteller.localeCompare(b.hersteller,"de")||(a.typ||"").localeCompare(b.typ||"","de")||a.name.localeCompare(b.name,"de"),
+    typ:(a,b)=>(a.typ||"").localeCompare(b.typ||"","de")||a.name.localeCompare(b.name,"de"),
+    nummer:(a,b)=>(a.nummer||"~").localeCompare(b.nummer||"~","de",{numeric:true}),
+    menge:(a,b)=>b.menge-a.menge||a.name.localeCompare(b.name,"de")
+  }[f.sort];
+  list.sort(cmp);
+  const total=S.paints.reduce((s,p)=>s+p.menge,0);
+  const empty=S.paints.filter(p=>p.menge===0).length;
+
+  let body;
+  if(!S.paints.length){
+    body=`<div class="emptystate"><h2>Das Regal ist leer</h2><p class="muted">Scanne den Barcode eines Farbtopfs oder lege eine Farbe von Hand an. Gibt es die Farbe schon, wird nur die Menge erhöht.</p>
+      <div class="row" style="justify-content:center"><button class="btn primary" data-action="scan">Barcode scannen</button><button class="btn" data-action="newPaint">Farbe erfassen</button><button class="btn ghost" data-action="sample">Beispieldaten laden</button></div></div>`;
+  } else if(!list.length){
+    body=`<div class="emptystate"><p class="muted">Keine Farbe passt zu diesem Filter.</p><button class="btn" data-action="clearFilter">Filter zurücksetzen</button></div>`;
+  } else {
+    const groupKey = f.sort==="hersteller" ? (p=>p.hersteller) : f.sort==="typ" ? (p=>p.typ||"Ohne Typ") : null;
+    const groups = groupKey ? list.reduce((m,p)=>{(m[groupKey(p)] ||= []).push(p);return m;},{}) : {"":list};
+    body = Object.entries(groups).map(([g,items])=>`
+      <section class="group">${g?`<h2>${esc(g)} <small>${items.length} ${items.length===1?"Farbe":"Farben"}</small></h2>`:""}
+      <div class="plist">${items.map(paintRow).join("")}</div></section>`).join("");
+  }
+  v.innerHTML = `
+    <div class="pagehead">
+      <div><h1>Farben</h1><div class="stats muted"><span class="mono">${S.paints.length}</span> Farben · <span class="mono">${total}</span> Töpfe${empty?` · <span class="mono">${empty}</span> aufgebraucht`:""}</div></div>
+      <div class="actions"><button class="btn" data-action="scan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3M7 8v8M10 8v8M13 8v8M17 8v8"/></svg>Scannen</button><button class="btn primary" data-action="newPaint">+ Neue Farbe</button></div>
+    </div>
+    ${S.paints.length?`<div class="filters">
+      <label class="f q">Suche<input type="search" id="fq" value="${esc(f.q)}" placeholder="Name, Nummer, Barcode"></label>
+      <label class="f">Hersteller<select id="fh"><option value="">Alle</option>${makers.map(m=>`<option ${m===f.hersteller?"selected":""}>${esc(m)}</option>`).join("")}</select></label>
+      <label class="f">Farbtyp<select id="ft"><option value="">Alle</option>${types.map(m=>`<option ${m===f.typ?"selected":""}>${esc(m)}</option>`).join("")}</select></label>
+      <label class="f">Sortieren<select id="fs">${[["hersteller","Hersteller"],["name","Name"],["typ","Farbtyp"],["nummer","Nummer"],["menge","Menge"]].map(([k,l])=>`<option value="${k}" ${k===f.sort?"selected":""}>${l}</option>`).join("")}</select></label>
+    </div>`:""}
+    ${body}`;
+  const fq=$("#fq");
+  if(fq){
+    fq.oninput=e=>{ f.q=e.target.value; const pos=e.target.selectionStart; renderPaints(); const n=$("#fq"); n.focus(); n.setSelectionRange(pos,pos); };
+    $("#fh").onchange=e=>{ f.hersteller=e.target.value; f.typ=""; renderPaints(); };
+    $("#ft").onchange=e=>{ f.typ=e.target.value; renderPaints(); };
+    $("#fs").onchange=e=>{ f.sort=e.target.value; renderPaints(); };
+  }
+}
+function paintRow(p){
+  return `<div class="prow ${p.menge===0?"empty":""}" data-action="editPaint" data-id="${p.id}">
+    <span class="pot" style="--sw:${esc(p.farbcode||"#888888")}"></span>
+    <div style="min-width:0"><div class="pname">${esc(p.name)}</div>
+      <div class="pmeta">${p.nummer?`<span class="mono">${esc(p.nummer)}</span>`:""}${S.filter.sort!=="hersteller"?`<span>${esc(p.hersteller)}</span>`:""}${p.typ?`<span class="tag">${esc(p.typ)}</span>`:""}${p.menge===0?`<span style="color:var(--warn);font-weight:700">aufgebraucht</span>`:""}</div></div>
+    <div class="qty" data-stop><button data-action="dec" data-id="${p.id}" aria-label="Menge verringern">−</button><output class="mono">${p.menge}</output><button data-action="inc" data-id="${p.id}" aria-label="Menge erhöhen">+</button></div>
+  </div>`;
+}
+
+/* ---------- Dialog: Farbe ---------- */
+let editPaintId=null, scanTarget=null;
+function openPaint(id, preset={}){
+  editPaintId=id;
+  const p = id ? paintById(id) : {hersteller:S.filter.hersteller||ls.get("fr.lastMaker",""), name:"", nummer:"", typ:"", menge:1, barcode:"", link:"", farbcode:"#888888", ...preset};
+  $("#paintTitle").textContent = id ? "Farbe bearbeiten" : "Neue Farbe";
+  $("#pHersteller").value=p.hersteller; $("#pName").value=p.name; $("#pNummer").value=p.nummer||"";
+  $("#pTyp").value=p.typ||""; $("#pMenge").value=p.menge; $("#pBarcode").value=p.barcode||""; $("#pLink").value=p.link||"";
+  $("#pFarbcode").value=p.farbcode||"#888888"; $("#pFarbcodeTxt").textContent=$("#pFarbcode").value;
+  $("#paintNotice").hidden=true; $("#paintDelWrap").hidden=!id; $("#paintDel").hidden=false; $("#paintDelConfirm").hidden=true;
+  fillLists(); updateSearchLink();
+  $("#dlgPaint").showModal();
+  if(!id) setTimeout(()=>($("#pHersteller").value?$("#pName"):$("#pHersteller")).focus(),50);
+}
+function fillLists(){
+  $("#dlHersteller").innerHTML = allMakers().map(m=>`<option value="${esc(m)}">`).join("");
+  $("#dlTypen").innerHTML = typesFor($("#pHersteller").value.trim()).map(t=>`<option value="${esc(t)}">`).join("");
+}
+function updateSearchLink(){ $("#pLinkSearch").href = searchUrl($("#pHersteller").value.trim(), $("#pName").value.trim(), $("#pNummer").value.trim()); }
+$("#pHersteller").addEventListener("input", ()=>{ fillLists(); updateSearchLink(); });
+$("#pName").addEventListener("input", updateSearchLink);
+$("#pNummer").addEventListener("input", updateSearchLink);
+$("#pFarbcode").addEventListener("input", e=>$("#pFarbcodeTxt").textContent=e.target.value);
+$$("#dlgPaint [data-step]").forEach(b=>b.onclick=()=>{ const i=$("#pMenge"); i.value=Math.max(0,(Number(i.value)||0)+Number(b.dataset.step)); });
+$("#paintDel").onclick=()=>{ $("#paintDel").hidden=true; $("#paintDelConfirm").hidden=false; };
+$("#paintDelConfirm").onclick=()=>{
+  S.paints=S.paints.filter(p=>p.id!==editPaintId); S.paintDel[editPaintId]=now();
+  $("#dlgPaint").close(); changed(); render(); toast("Farbe gelöscht");
+};
+$("#paintForm").addEventListener("submit", e=>{
+  e.preventDefault();
+  const data = {
+    hersteller:$("#pHersteller").value.trim(), name:$("#pName").value.trim(), nummer:$("#pNummer").value.trim(),
+    typ:$("#pTyp").value.trim(), menge:Math.max(0,parseInt($("#pMenge").value,10)||0), barcode:$("#pBarcode").value.trim(),
+    link:$("#pLink").value.trim(), farbcode:$("#pFarbcode").value
+  };
+  const n=$("#paintNotice");
+  if(!data.hersteller || !data.name){ n.className="notice err"; n.textContent="Bitte Hersteller und Name der Farbe angeben."; n.hidden=false; return; }
+  ls.set("fr.lastMaker", data.hersteller);
+  const dup = findDuplicate(data, editPaintId);
+  if(!editPaintId && dup){
+    dup.menge += data.menge || 1;
+    for(const k of ["barcode","link","typ","nummer"]) if(!dup[k] && data[k]) dup[k]=data[k];
+    dup.geaendert=now(); $("#dlgPaint").close(); changed(); render();
+    toast(`${dup.name} gab es schon – Menge jetzt ${dup.menge}`); return;
+  }
+  if(editPaintId && dup){ n.className="notice err"; n.textContent=`Diese Farbe (gleicher Name/Nummer oder Barcode) existiert schon: ${paintLabel(dup)}.`; n.hidden=false; return; }
+  if(editPaintId){ Object.assign(paintById(editPaintId), data, {geaendert:now()}); toast("Gespeichert"); }
+  else { S.paints.push({id:uid(), ...data, geaendert:now()}); toast(`${data.name} angelegt`); }
+  $("#dlgPaint").close(); changed(); render();
+});
+
+/* ---------- Scanner ---------- */
+let qr=null;
+function scanFormats(){
+  const F = window.Html5QrcodeSupportedFormats; if(!F) return undefined;
+  return [F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.CODE_128,F.CODE_39,F.ITF].filter(x=>x!==undefined);
+}
+async function openScan(target=null){
+  scanTarget=target;
+  $("#scanErr").hidden=true; $("#scanResult").hidden=true; $("#scanManual").value=""; $("#reader").hidden=false;
+  $("#dlgScan").showModal();
+  if(!window.Html5Qrcode){ showScanErr("Der Scanner konnte nicht geladen werden (keine Internetverbindung?). Tippe den Barcode unten ein."); return; }
+  try{
+    qr = new Html5Qrcode("reader", {formatsToSupport:scanFormats(), verbose:false, experimentalFeatures:{useBarCodeDetectorIfSupported:true}});
+    await qr.start({facingMode:"environment"}, {fps:12, qrbox:(w,h)=>({width:Math.min(300,w*0.85), height:Math.min(150,h*0.5)})}, code=>gotCode(code), ()=>{});
+  }catch(err){
+    showScanErr("Die Kamera ließ sich nicht starten. Erlaube den Kamerazugriff im Browser (nur über https möglich) oder tippe den Barcode ein.");
+    $("#reader").hidden=true;
+  }
+}
+function showScanErr(m){ const e=$("#scanErr"); e.textContent=m; e.hidden=false; }
+async function stopScan(){ if(qr){ try{ if(qr.isScanning) await qr.stop(); qr.clear(); }catch(e){} qr=null; } }
+$("#dlgScan").addEventListener("close", stopScan);
+$("#scanManualBtn").onclick=()=>{ const c=$("#scanManual").value.trim(); if(c) gotCode(c); };
+$("#scanManual").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); $("#scanManualBtn").click(); }});
+$("#scanFile").onchange=async e=>{
+  const file=e.target.files[0]; e.target.value=""; if(!file||!window.Html5Qrcode) return;
+  await stopScan();
+  try{ const tmp=new Html5Qrcode("reader",{formatsToSupport:scanFormats(),verbose:false}); const code=await tmp.scanFile(file,false); tmp.clear(); gotCode(code); }
+  catch(err){ showScanErr("Auf dem Foto wurde kein Barcode erkannt. Versuch es näher und schärfer, oder tippe ihn ein."); }
+};
+async function gotCode(code){
+  code=String(code).trim();
+  if(navigator.vibrate) navigator.vibrate(60);
+  await stopScan(); $("#reader").hidden=true; $("#scanErr").hidden=true;
+  if(scanTarget==="form"){ $("#dlgScan").close(); $("#pBarcode").value=code; toast("Barcode übernommen"); return; }
+  const hit = S.paints.find(p=>p.barcode===code);
+  const r=$("#scanResult"); r.hidden=false;
+  if(hit){
+    r.innerHTML=`<div class="panel" style="display:grid;gap:10px">
+      <div class="row" style="flex-wrap:nowrap"><span class="pot" style="--sw:${esc(hit.farbcode||"#888")}"></span><div><div class="pname">${esc(hit.name)}</div><div class="muted" style="font-size:13px">${esc(hit.hersteller)}${hit.typ?` · ${esc(hit.typ)}`:""} · Bestand <b class="mono">${hit.menge}</b></div></div></div>
+      <div class="row"><button class="btn primary" id="srAdd">+1 Topf hinzufügen</button><button class="btn" id="srEdit">Bearbeiten</button><button class="btn ghost" id="srAgain">Weiter scannen</button></div></div>`;
+    $("#srAdd").onclick=()=>{ setQty(hit.id, hit.menge+1); render(); toast(`${hit.name}: jetzt ${hit.menge} Töpfe`); openScan(); };
+    $("#srEdit").onclick=()=>{ $("#dlgScan").close(); openPaint(hit.id); };
+  } else {
+    r.innerHTML=`<div class="panel" style="display:grid;gap:10px"><div>Barcode <b class="mono">${esc(code)}</b> ist noch nicht im Regal.</div>
+      <div class="row"><button class="btn primary" id="srNew">Neue Farbe mit diesem Barcode</button><button class="btn ghost" id="srAgain">Nochmal scannen</button></div></div>`;
+    $("#srNew").onclick=()=>{ $("#dlgScan").close(); openPaint(null,{barcode:code}); };
+  }
+  $("#srAgain").onclick=()=>openScan();
+}
+
+/* ---------- Rezepte: Hilfen ---------- */
+function walk(steps, fn, prefix=[], depth=0){ steps.forEach((s,i)=>{ const num=[...prefix,i+1]; fn(s,num,depth); walk(s.schritte||[],fn,num,depth+1); }); }
+function recipePaints(r){
+  const map=new Map();
+  walk(r.schritte||[], s=>{ for(const m of s.materialien||[]) if(m.art==="farbe") map.set(m.farbeId, m); });
+  return [...map.values()];
+}
+function recipeCover(r){ let img=null; walk(r.schritte||[], s=>{ if(!img && s.bild) img=s.bild; }); return img; }
+function countSteps(r){ let n=0; walk(r.schritte||[],()=>n++); return n; }
+function matChip(m){
+  if(m.art==="text") return `<span class="mchip text">${esc(m.text)}</span>`;
+  const p=paintById(m.farbeId);
+  const missing = !p || p.menge===0;
+  const label = p ? `${p.name}${p.nummer?` <span class="mono" style="font-size:11px">${esc(p.nummer)}</span>`:""}` : esc(m.anzeige||"Unbekannte Farbe");
+  return `<span class="mchip ${missing?"missing":""}" title="${esc(p?paintLabel(p):m.anzeige)}"><span class="sw" style="--sw:${esc(p?.farbcode||"#888")}"></span>${p?esc(p.name):label}${p&&p.nummer?` <span class="mono muted" style="font-size:11px">${esc(p.nummer)}</span>`:""}</span>`;
+}
+
+/* ---------- Ansicht: Rezeptliste ---------- */
+function renderRecipes(){
+  const v=$("#view");
+  const cards = S.recipes.slice().sort((a,b)=>a.name.localeCompare(b.name,"de")).map(r=>{
+    const cover=recipeCover(r), paints=recipePaints(r).slice(0,8);
+    const missing=recipePaints(r).filter(m=>{const p=paintById(m.farbeId);return !p||p.menge===0;}).length;
+    return `<button class="rcard" data-action="openRecipe" data-id="${r.id}">
+      <div class="rcover ${cover?"photo":""}">${cover?`<img src="${cover}" alt="">`:paints.map(m=>`<span class="pot" style="--sw:${esc(paintById(m.farbeId)?.farbcode||"#888")}"></span>`).join("")||`<span class="muted">Noch keine Farben</span>`}</div>
+      <div class="info"><h3>${esc(r.name)}</h3><div class="muted" style="font-size:13px"><span class="mono">${countSteps(r)}</span> Schritte · <span class="mono">${recipePaints(r).length}</span> Farben${missing?` · <span style="color:var(--danger);font-weight:700">${missing} fehlen</span>`:""}</div></div>
+    </button>`;
+  }).join("");
+  v.innerHTML=`<div class="pagehead"><div><h1>Rezepte</h1><div class="stats muted"><span class="mono">${S.recipes.length}</span> Rezepte</div></div>
+    <div class="actions"><button class="btn primary" data-action="newRecipe">+ Neues Rezept</button></div></div>
+    ${S.recipes.length?`<div class="rgrid">${cards}</div>`:`<div class="emptystate"><h2>Noch keine Rezepte</h2><p class="muted">Ein Rezept besteht aus Arbeitsschritten, die nacheinander folgen oder ineinander verschachtelt sind. Jeder Schritt nennt mindestens ein Material und kann ein Foto haben.</p><div class="row" style="justify-content:center"><button class="btn primary" data-action="newRecipe">Rezept anlegen</button>${S.paints.length?"":`<button class="btn ghost" data-action="sample">Beispieldaten laden</button>`}</div></div>`}`;
+}
+
+/* ---------- Ansicht: Rezeptdetail mit drei Darstellungen ---------- */
+const MODES = {
+  tree:{label:"Baum", note:"Klassische verschachtelte Baumstruktur: kompakt, zeigt die Hierarchie auf einen Blick."},
+  flow:{label:"Ablauf", note:"Nummerierte Schritt-Karten mit großen Fotos, Unterschritte eingerückt. Gut zum Nachlesen."},
+  paint:{label:"Malmodus", note:"Ein Schritt pro Bildschirm zum Durchwischen, gedacht fürs Tablet neben dem Pinsel."}
+};
+let pmIndex=0;
+function renderRecipe(){
+  const r=S.recipes.find(x=>x.id===S.recipeId); if(!r){ S.view="rezepte"; return render(); }
+  if(S.editing) return renderEditor();
+  const v=$("#view"), mode=S.recipeMode;
+  const shop = recipePaints(r);
+  let content;
+  if(!(r.schritte||[]).length) content=`<div class="emptystate"><p class="muted">Dieses Rezept hat noch keine Schritte.</p><button class="btn primary" data-action="editRecipe">Schritte hinzufügen</button></div>`;
+  else if(mode==="tree") content=`<div class="panel"><ul class="tree">${treeHtml(r.schritte,[])}</ul></div>`;
+  else if(mode==="flow") content=`<div class="flow">${flowHtml(r.schritte,[])}</div>`;
+  else content=paintModeHtml(r);
+  v.innerHTML=`<div class="rdetail">
+    <div><button class="btn ghost sm" data-action="backRecipes">← Alle Rezepte</button></div>
+    <div class="pagehead" style="margin:0"><div style="min-width:0"><h1>${esc(r.name)}</h1>${r.notiz?`<p class="muted" style="margin:6px 0 0;max-width:65ch;white-space:pre-wrap">${esc(r.notiz)}</p>`:""}</div>
+      <div class="actions"><button class="btn primary" data-action="editRecipe">Bearbeiten</button></div></div>
+    <div class="row"><div class="seg" role="group" aria-label="Darstellung">${Object.entries(MODES).map(([k,m])=>`<button data-action="mode" data-mode="${k}" aria-pressed="${k===mode}">${m.label}</button>`).join("")}</div></div>
+    <div class="viewnote">${MODES[mode].note}</div>
+    <div class="layout2"><div style="min-width:0">${content}</div>
+      <aside class="panel shop"><h3>Benötigte Farben</h3>${shop.length?`<ul>${shop.map(m=>{const p=paintById(m.farbeId);return `<li><span class="pot" style="--sw:${esc(p?.farbcode||"#888")}"></span><span style="min-width:0;overflow-wrap:anywhere">${esc(p?p.name:m.anzeige)}${p?`<span class="muted" style="font-size:12px"> · ${esc(p.hersteller)}</span>`:""}</span>${!p?`<span class="stock no">gelöscht</span>`:p.menge===0?`<span class="stock no">leer</span>`:`<span class="stock">×${p.menge}</span>`}</li>`;}).join("")}</ul>`:`<p class="muted" style="margin:0">Keine Farben aus dem Inventar verwendet.</p>`}</aside>
+    </div></div>`;
+  if(mode==="paint") bindPaintMode(r);
+}
+function treeHtml(steps, prefix){
+  return steps.map((s,i)=>{ const num=[...prefix,i+1];
+    return `<li><div class="tnode"><span class="tnum">${num.join(".")}</span><div style="min-width:0"><div class="ttext">${esc(s.text)||"<span class='muted'>Ohne Beschreibung</span>"}</div><div class="mchips">${(s.materialien||[]).map(matChip).join("")}</div></div>${s.bild?`<img class="tthumb" src="${s.bild}" alt="Foto zu Schritt ${num.join(".")}" data-action="zoom">`:"<span></span>"}</div>
+    ${(s.schritte||[]).length?`<ul>${treeHtml(s.schritte,num)}</ul>`:""}</li>`; }).join("");
+}
+function flowHtml(steps, prefix){
+  return steps.map((s,i)=>{ const num=[...prefix,i+1];
+    return `<div class="fstep"><div class="fnum">${num.join(".")}</div><div class="fbody">
+      ${s.bild?`<img class="fimg" src="${s.bild}" alt="Foto zu Schritt ${num.join(".")}" data-action="zoom">`:""}
+      <div class="ftext"><div style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(s.text)||"<span class='muted'>Ohne Beschreibung</span>"}</div><div class="mchips">${(s.materialien||[]).map(matChip).join("")}</div></div>
+      ${(s.schritte||[]).length?`<div class="fsub">${flowHtml(s.schritte,num)}</div>`:""}
+    </div></div>`; }).join("");
+}
+function flatSteps(r){ const out=[]; walk(r.schritte||[], (s,num,depth)=>out.push({s,num,depth})); return out; }
+function paintModeHtml(r){
+  const fl=flatSteps(r); pmIndex=Math.min(pmIndex, fl.length-1);
+  const {s,num}=fl[pmIndex];
+  const parents=[]; for(let k=1;k<num.length;k++){ const p=fl.find(x=>x.num.join(".")===num.slice(0,k).join(".")); if(p) parents.push(`${p.num.join(".")} ${(p.s.text||"").split("\n")[0].slice(0,40)}`); }
+  return `<div class="paintmode"><div class="pmcard" id="pmCard">
+    <div class="pmimg">${s.bild?`<img src="${s.bild}" alt="Foto zu Schritt ${num.join(".")}" data-action="zoom">`:"Kein Foto zu diesem Schritt"}</div>
+    <div class="pmtext"><div class="crumb">Schritt ${num.join(".")} von ${fl.length}${parents.length?` · in ${esc(parents.join(" › "))}`:""}</div>
+      <div class="big">${esc(s.text)||"<span class='muted'>Ohne Beschreibung</span>"}</div>
+      <div class="mchips">${(s.materialien||[]).map(matChip).join("")}</div></div></div>
+    <div class="pmnav"><button class="btn" data-action="pmPrev" ${pmIndex===0?"disabled":""}>← Zurück</button>
+      <div class="dots">${fl.map((x,i)=>`<button class="${x.depth?"sub":""}" data-action="pmGo" data-i="${i}" aria-label="Schritt ${x.num.join(".")}" aria-current="${i===pmIndex}"></button>`).join("")}</div>
+      <button class="btn primary" data-action="pmNext" ${pmIndex===fl.length-1?"disabled":""}>Weiter →</button></div></div>`;
+}
+function bindPaintMode(){
+  const c=$("#pmCard"); if(!c) return; let x0=null;
+  c.addEventListener("touchstart",e=>x0=e.touches[0].clientX,{passive:true});
+  c.addEventListener("touchend",e=>{ if(x0===null) return; const dx=e.changedTouches[0].clientX-x0; x0=null;
+    if(Math.abs(dx)>50){ const b=$(dx<0?'[data-action="pmNext"]':'[data-action="pmPrev"]'); if(b&&!b.disabled) b.click(); } });
+}
+
+/* ---------- Rezept-Editor ---------- */
+function blankStep(){ return {id:uid(), text:"", materialien:[], bild:"", schritte:[]}; }
+function stepAt(path){ let arr=S.editing.schritte, s=null; for(const i of path){ s=arr[i]; arr=s.schritte; } return s; }
+function arrAt(path){ return path.length ? stepAt(path.slice(0,-1))?.schritte ?? S.editing.schritte : S.editing.schritte; }
+let editorErrors=new Set();
+function renderEditor(){
+  const r=S.editing, v=$("#view");
+  const isNew=!S.recipes.some(x=>x.id===r.id);
+  v.innerHTML=`<div class="rdetail">
+    <div class="pagehead" style="margin:0"><h1>${isNew?"Neues Rezept":"Rezept bearbeiten"}</h1>
+      <div class="actions"><button class="btn" data-action="cancelEdit">Abbrechen</button><button class="btn primary" data-action="saveRecipe">Speichern</button></div></div>
+    <div class="notice err" id="edErr" hidden></div>
+    <div class="panel" style="display:grid;gap:12px">
+      <label class="f">Rezeptname<input type="text" id="rName" value="${esc(r.name)}" placeholder="z. B. Ultramarine-Rüstung, schnelle Methode"></label>
+      <label class="f">Notiz (optional)<textarea id="rNotiz" rows="2" placeholder="Wofür, welcher Look, Pinselgröße …">${esc(r.notiz||"")}</textarea></label>
+    </div>
+    <h2>Arbeitsschritte</h2>
+    <div class="ed">${edSteps(r.schritte,[])}</div>
+    <div><button class="btn" data-action="addStep" data-path="">+ Schritt hinzufügen</button></div>
+    ${isNew?"":`<div style="border-top:1px solid var(--line);padding-top:16px"><button class="btn danger" data-action="delRecipe">Rezept löschen</button> <button class="btn danger" data-action="delRecipeConfirm" hidden>Wirklich löschen</button></div>`}
+  </div>`;
+  $("#rName").oninput=e=>r.name=e.target.value;
+  $("#rNotiz").oninput=e=>r.notiz=e.target.value;
+  $$("#view textarea[data-path]").forEach(t=>t.oninput=e=>stepAt(pathOf(e.target)).text=e.target.value);
+  $$("#view input[data-mtext]").forEach(t=>t.oninput=e=>{ stepAt(pathOf(e.target)).materialien[Number(e.target.dataset.mtext)].text=e.target.value; });
+  $$("#view input[type=file][data-path]").forEach(inp=>inp.onchange=async e=>{
+    const f=e.target.files[0]; if(!f) return; const path=pathOf(e.target);
+    try{ stepAt(path).bild=await shrinkImage(f); renderEditor(); }catch(err){ toast("Das Bild konnte nicht gelesen werden."); }
+  });
+}
+function pathOf(el){ const p=el.dataset.path; return p===""?[]:p.split(".").map(Number); }
+function edSteps(steps, prefix){
+  return steps.map((s,i)=>{ const path=[...prefix,i], key=path.join("."), num=path.map(x=>x+1).join(".");
+    return `<div class="estep ${editorErrors.has(s.id)?"err-step":""}">
+      <div class="ehead"><span class="tnum">${num}</span><span class="grow"></span>
+        <button class="btn ghost sm iconbtn" data-action="up" data-path="${key}" aria-label="Nach oben" ${i===0?"disabled":""}>↑</button>
+        <button class="btn ghost sm iconbtn" data-action="down" data-path="${key}" aria-label="Nach unten" ${i===steps.length-1?"disabled":""}>↓</button>
+        <button class="btn ghost sm" data-action="delStep" data-path="${key}" style="color:var(--danger)">Entfernen</button></div>
+      <textarea data-path="${key}" rows="2" placeholder="Was wird gemacht? z. B. Zwei dünne Schichten auf alle Rüstungsplatten">${esc(s.text)}</textarea>
+      <div class="mlist">${(s.materialien||[]).map((m,mi)=>`<div class="mitem">${m.art==="farbe"?matChip(m):`<input type="text" data-path="${key}" data-mtext="${mi}" value="${esc(m.text)}" placeholder="Material, z. B. Pinsel Gr. 1, Mattlack, Sand">`}<button class="btn ghost sm iconbtn" data-action="delMat" data-path="${key}" data-mi="${mi}" aria-label="Material entfernen">✕</button></div>`).join("")}</div>
+      ${editorErrors.has(s.id)?`<div style="color:var(--danger);font-size:13px;font-weight:700">Mindestens ein Material angeben.</div>`:""}
+      <div class="row"><button class="btn sm" data-action="addPaintMat" data-path="${key}">+ Farbe aus Inventar</button><button class="btn sm" data-action="addTextMat" data-path="${key}">+ Anderes Material</button></div>
+      <div class="eimg">${s.bild?`<img src="${s.bild}" alt="">`:""}<span class="btn sm filebtn">${s.bild?"Foto ersetzen":"Foto aufnehmen"}<input type="file" accept="image/*" capture="environment" data-path="${key}"></span>${s.bild?`<button class="btn ghost sm" data-action="delImg" data-path="${key}">Foto entfernen</button>`:""}</div>
+      ${(s.schritte||[]).length?`<div class="esubs">${edSteps(s.schritte,path)}</div>`:""}
+      <div><button class="btn ghost sm" data-action="addStep" data-path="${key}">+ Unterschritt zu ${num}</button></div>
+    </div>`; }).join("");
+}
+function shrinkImage(file, max=1280, q=0.75){
+  return new Promise((res,rej)=>{ const url=URL.createObjectURL(file), img=new Image();
+    img.onload=()=>{ const k=Math.min(1,max/Math.max(img.width,img.height)); const c=document.createElement("canvas");
+      c.width=Math.round(img.width*k); c.height=Math.round(img.height*k); c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+      URL.revokeObjectURL(url); res(c.toDataURL("image/jpeg",q)); };
+    img.onerror=()=>{URL.revokeObjectURL(url);rej();}; img.src=url; });
+}
+let pickPath=null;
+function openPick(path){ pickPath=path; $("#pickQ").value=""; renderPick(); $("#dlgPick").showModal(); setTimeout(()=>$("#pickQ").focus(),50); }
+function renderPick(){
+  const q=norm($("#pickQ").value);
+  const list=S.paints.filter(p=>!q||norm(paintLabel(p)+" "+p.typ).includes(q)).sort((a,b)=>a.hersteller.localeCompare(b.hersteller,"de")||a.name.localeCompare(b.name,"de")).slice(0,200);
+  $("#pickList").innerHTML = S.paints.length ? (list.map(p=>`<button class="pick" data-pick="${p.id}"><span class="pot" style="--sw:${esc(p.farbcode||"#888")}"></span><span style="min-width:0"><b>${esc(p.name)}</b> <span class="muted" style="font-size:13px">${esc(p.hersteller)}${p.typ?` · ${esc(p.typ)}`:""}${p.nummer?` · ${esc(p.nummer)}`:""}</span></span><span class="mono muted" style="font-size:12px">×${p.menge}</span></button>`).join("") || `<p class="muted">Keine Treffer.</p>`)
+    : `<p class="muted">Im Inventar sind noch keine Farben. Lege zuerst Farben an oder verwende „Anderes Material“.</p>`;
+}
+$("#pickQ").oninput=renderPick;
+$("#pickList").onclick=e=>{ const b=e.target.closest("[data-pick]"); if(!b) return; const p=paintById(b.dataset.pick);
+  stepAt(pickPath).materialien.push({art:"farbe", farbeId:p.id, anzeige:paintLabel(p)}); editorErrors.delete(stepAt(pickPath).id); $("#dlgPick").close(); renderEditor(); };
+
+function saveRecipe(){
+  const r=S.editing; editorErrors=new Set();
+  walk(r.schritte, s=>{ s.materialien=(s.materialien||[]).filter(m=>m.art==="farbe"||m.text.trim()); if(!s.materialien.length) editorErrors.add(s.id); });
+  const err=[]; if(!r.name.trim()) err.push("Gib dem Rezept einen Namen.");
+  if(editorErrors.size) err.push(`${editorErrors.size} ${editorErrors.size===1?"Schritt hat":"Schritte haben"} noch kein Material.`);
+  if(err.length){ renderEditor(); const e=$("#edErr"); e.textContent=err.join(" "); e.hidden=false; e.scrollIntoView({behavior:"smooth",block:"center"}); return; }
+  r.name=r.name.trim(); r.geaendert=now();
+  const i=S.recipes.findIndex(x=>x.id===r.id); if(i>=0) S.recipes[i]=r; else S.recipes.push(r);
+  S.recipeId=r.id; S.editing=null; changed(); render(); toast("Rezept gespeichert");
+}
+
+/* ---------- Beispieldaten ---------- */
+function loadSample(){
+  const t=now();
+  const P=(hersteller,name,nummer,typ,menge,farbcode)=>({id:uid(),hersteller,name,nummer,typ,menge,barcode:"",link:"",farbcode,geaendert:t});
+  const ps=[
+    P("Citadel","Mephiston Red","","Base",2,"#8e1b1b"), P("Citadel","Evil Sunz Scarlet","","Layer",1,"#c3271f"),
+    P("Citadel","Agrax Earthshade","","Shade",1,"#4a3a24"), P("Citadel","Nuln Oil","","Shade",2,"#1c1c1f"),
+    P("Citadel","Leadbelcher","","Base",1,"#7d8087"), P("Citadel","Stormhost Silver","","Layer",0,"#c9ccd2"),
+    P("Vallejo","Black","70.950","Model Color",1,"#1a1a1a"), P("Vallejo","White","70.951","Model Color",1,"#f2f2ee"),
+    P("AK Interactive","White","AK11001","3rd Gen Standard",1,"#f4f4f2")
+  ];
+  ps.forEach(p=>{ if(!findDuplicate(p)) S.paints.push(p); });
+  const id=n=>S.paints.find(p=>p.name===n)?.id;
+  const F=n=>({art:"farbe",farbeId:id(n),anzeige:n}), T=x=>({art:"text",text:x});
+  const st=(text,mats,subs=[])=>({id:uid(),text,materialien:mats,bild:"",schritte:subs});
+  S.recipes.push({id:uid(),name:"Beispiel: Rote Rüstung",notiz:"Beispielrezept, kann gelöscht werden.",geaendert:t,schritte:[
+    st("Modell schwarz grundieren, aus 20 cm Abstand in kurzen Stößen.",[T("Schwarzer Sprühprimer")]),
+    st("Rüstung in zwei dünnen Schichten grundieren.",[F("Mephiston Red"),T("Pinsel Gr. 2")],[
+      st("Vertiefungen und Übergänge gezielt abschatten.",[F("Agrax Earthshade")]),
+      st("Kanten mit der Pinselseite hervorheben.",[F("Evil Sunz Scarlet"),T("Detailpinsel Gr. 0")])
+    ]),
+    st("Metallteile: Waffe, Gürtelschnalle, Nieten.",[F("Leadbelcher")],[
+      st("Gesamtes Metall waschen.",[F("Nuln Oil")]),
+      st("Punktuelle Lichtkanten.",[F("Stormhost Silver")])
+    ]),
+    st("Mattlack zum Schutz auftragen.",[T("Mattlack (Spray)")])
+  ]});
+  changed(); render(); toast("Beispieldaten geladen");
+}
+
+/* ---------- Google Drive Sync ---------- */
+const Sync = {
+  token:null, exp:0, client:null, folderId:null, files:{}, busy:false, again:false,
+  clientId(){ return GOOGLE_CLIENT_ID || ls.get("fr.clientId",""); },
+  status(s, text){ const p=$("#syncPill"); p.dataset.s=s; $("#syncText").textContent=text; },
+  loadGis(){ return new Promise((res,rej)=>{ if(window.google?.accounts?.oauth2) return res();
+    const s=document.createElement("script"); s.src="https://accounts.google.com/gsi/client"; s.onload=res; s.onerror=()=>rej(new Error("gis")); document.head.appendChild(s); }); },
+  async getToken(prompt=""){
+    if(this.token && Date.now()<this.exp-60000) return this.token;
+    await this.loadGis();
+    return new Promise((res,rej)=>{
+      if(!this.client) this.client=google.accounts.oauth2.initTokenClient({client_id:this.clientId(), scope:"https://www.googleapis.com/auth/drive.file", callback:()=>{}});
+      this.client.callback=r=>{ if(r.error) return rej(new Error(r.error)); this.token=r.access_token; this.exp=Date.now()+r.expires_in*1000; ls.set("fr.connected",true); res(this.token); };
+      this.client.error_callback=e=>rej(new Error(e.type||"popup"));
+      this.client.requestAccessToken({prompt, hint: ls.get("fr.hint", undefined)});
+    });
+  },
+  async api(url, opt={}, retry=true){
+    const t=await this.getToken();
+    const r=await fetch(url,{...opt,headers:{...(opt.headers||{}),Authorization:"Bearer "+t}});
+    if(r.status===401 && retry){ this.token=null; return this.api(url,opt,false); }
+    if(!r.ok) throw new Error("Drive "+r.status);
+    return r;
+  },
+  async find(q){ const r=await this.api("https://www.googleapis.com/drive/v3/files?spaces=drive&fields=files(id,name)&q="+encodeURIComponent(q)); return (await r.json()).files?.[0]?.id||null; },
+  async folder(){
+    if(this.folderId) return this.folderId;
+    let id=await this.find(`name='${DRIVE_FOLDER}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+    if(!id){ const r=await this.api("https://www.googleapis.com/drive/v3/files?fields=id",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:DRIVE_FOLDER,mimeType:"application/vnd.google-apps.folder"})}); id=(await r.json()).id; }
+    return this.folderId=id;
+  },
+  async fileId(name){
+    if(this.files[name]) return this.files[name];
+    const id=await this.find(`name='${name}' and '${await this.folder()}' in parents and trashed=false`);
+    if(id) this.files[name]=id; return id;
+  },
+  async download(id){ const r=await this.api(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`); try{ return await r.json(); }catch(e){ return null; } },
+  async upload(name, data){
+    const body=JSON.stringify(data,null,1); const id=await this.fileId(name);
+    if(id){ await this.api(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`,{method:"PATCH",headers:{"Content-Type":"application/json"},body}); return; }
+    const b="frb"+Math.random().toString(36).slice(2);
+    const multipart=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({name,parents:[await this.folder()],mimeType:"application/json"})}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${b}--`;
+    const r=await this.api("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",{method:"POST",headers:{"Content-Type":"multipart/related; boundary="+b},body:multipart});
+    this.files[name]=(await r.json()).id;
+  },
+  fingerprint(f){ const {aktualisiert, ...rest}=f||{}; return JSON.stringify(rest); },
+  async run(interactive=false){
+    if(!this.clientId() || (!ls.get("fr.connected",false) && !interactive)) return;
+    if(this.busy){ this.again=true; return; }
+    if(!navigator.onLine){ this.status("err","Offline – lokal gespeichert"); return; }
+    this.busy=true; this.status("busy","Synchronisiere …");
+    try{
+      if(interactive) await this.getToken("");
+      // Farben
+      let id=await this.fileId(FILE_PAINTS), remote=id?await this.download(id):null, rp=paintsFromFile(remote);
+      let m=merge(S.paints,S.paintDel,rp.list,rp.del); S.paints=m.list; S.paintDel=m.del;
+      let out=paintsToFile(); if(!id || this.fingerprint(out)!==this.fingerprint(remote)) await this.upload(FILE_PAINTS,out);
+      // Rezepte
+      id=await this.fileId(FILE_RECIPES); remote=id?await this.download(id):null; rp=recipesFromFile(remote);
+      m=merge(S.recipes,S.recipeDel,rp.list,rp.del); S.recipes=m.list; S.recipeDel=m.del;
+      out=recipesToFile(); if(!id || this.fingerprint(out)!==this.fingerprint(remote)) await this.upload(FILE_RECIPES,out);
+      await persist();
+      this.status("ok","Drive · "+new Date().toLocaleTimeString("de-AT",{hour:"2-digit",minute:"2-digit"}));
+      if(!S.editing && !$("dialog[open]")) render();
+    }catch(err){
+      const msg=String(err.message||err);
+      if(/popup|access_denied|gis|interaction|consent/.test(msg)) this.status("err","Tippen zum Verbinden");
+      else this.status("err","Sync fehlgeschlagen – lokal gespeichert");
+      console.warn(err);
+    }finally{
+      this.busy=false; if(this.again){ this.again=false; setTimeout(()=>this.run(),300); }
+    }
+  },
+  disconnect(){ try{ if(this.token) google.accounts.oauth2.revoke(this.token,()=>{}); }catch(e){} this.token=null; this.folderId=null; this.files={}; ls.set("fr.connected",false); this.status("off","Nur lokal"); }
+};
+$("#syncPill").onclick=()=>{ if(!Sync.clientId()){ go("einstellungen"); return; } Sync.run(true); };
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") Sync.run(); });
+window.addEventListener("online",()=>Sync.run());
+
+/* ---------- Ansicht: Sync & Daten ---------- */
+function renderSettings(){
+  const v=$("#view"), cid=Sync.clientId(), connected=ls.get("fr.connected",false);
+  v.innerHTML=`<div class="settings">
+    <div class="pagehead" style="margin:0"><h1>Sync &amp; Daten</h1></div>
+    <section class="panel" style="display:grid;gap:12px"><h2>Google Drive</h2>
+      <p style="margin:0">Alle Geräte lesen und schreiben dieselben zwei Dateien im Drive-Ordner <b>${DRIVE_FOLDER}</b>: <code>${FILE_PAINTS}</code> und <code>${FILE_RECIPES}</code>. Ohne Verbindung speichert die App nur auf diesem Gerät.</p>
+      <label class="f">OAuth-Client-ID${GOOGLE_CLIENT_ID?" (fest im Code eingetragen)":""}<input type="text" id="cid" value="${esc(cid)}" ${GOOGLE_CLIENT_ID?"readonly":""} placeholder="1234567890-abc….apps.googleusercontent.com" class="mono" style="font-size:13px"></label>
+      <div class="row">${connected?`<button class="btn primary" data-action="syncNow">Jetzt synchronisieren</button><button class="btn" data-action="disconnect">Trennen</button>`:`<button class="btn primary" data-action="connect">Mit Google Drive verbinden</button>`}</div>
+      <details><summary style="cursor:pointer;font-weight:700">So bekommst du eine Client-ID</summary>
+        <ol style="margin-top:10px">
+          <li>In der <b>Google Cloud Console</b> ein Projekt anlegen und die <b>Google Drive API</b> aktivieren.</li>
+          <li>Unter <b>OAuth-Zustimmungsbildschirm</b> „Extern“ wählen, App-Name eintragen, dich selbst als <b>Testnutzer</b> hinzufügen.</li>
+          <li>Unter <b>Anmeldedaten → OAuth-Client-ID → Webanwendung</b> bei „Autorisierte JavaScript-Quellen“ die Adresse dieser App eintragen: <code>${esc(location.origin)}</code></li>
+          <li>Die erzeugte Client-ID hier einfügen und verbinden.</li>
+        </ol></details>
+    </section>
+    <section class="panel" style="display:grid;gap:12px"><h2>Sicherung</h2>
+      <p class="muted" style="margin:0">Exportiert beide Listen als JSON-Datei, im selben Format wie auf Drive.</p>
+      <div class="row"><button class="btn" data-action="export">JSON exportieren</button><span class="btn filebtn">JSON importieren<input type="file" accept="application/json,.json" id="imp"></span></div>
+    </section>
+    <section class="panel" style="display:grid;gap:8px"><h2>Auf dem Handy als App</h2>
+      <p class="muted" style="margin:0">iPhone/iPad: in Safari auf Teilen → „Zum Home-Bildschirm“. Android/PC (Chrome/Edge): Menü → „App installieren“ bzw. „Zum Startbildschirm“.</p>
+    </section></div>`;
+  const c=$("#cid"); if(c && !GOOGLE_CLIENT_ID) c.onchange=e=>{ ls.set("fr.clientId",e.target.value.trim()); Sync.client=null; };
+  $("#imp").onchange=async e=>{ const f=e.target.files[0]; if(!f) return;
+    try{ const d=JSON.parse(await f.text());
+      const take=(obj)=>{ if(obj?.hersteller){ const p=paintsFromFile(obj); const m=merge(S.paints,S.paintDel,p.list,p.del); S.paints=m.list; S.paintDel=m.del; }
+        if(obj?.rezepte){ const p=recipesFromFile(obj); const m=merge(S.recipes,S.recipeDel,p.list,p.del); S.recipes=m.list; S.recipeDel=m.del; } };
+      take(d.farben||d); take(d.rezepte?.rezepte?d.rezepte:d); changed(); toast("Import abgeschlossen");
+    }catch(err){ toast("Die Datei ist kein gültiges Farbregal-JSON."); } };
+}
+function exportJson(){
+  const blob=new Blob([JSON.stringify({farben:paintsToFile(),rezepte:recipesToFile()},null,1)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`farbregal-${new Date().toISOString().slice(0,10)}.json`; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
+/* ---------- Navigation & Ereignisse ---------- */
+function go(view){ S.view=view; if(view!=="rezept"){ S.editing=null; } render(); window.scrollTo(0,0); }
+function render(){
+  const top = S.view==="rezept" ? "rezepte" : S.view;
+  $$("[data-go]").forEach(b=>b.setAttribute("aria-current", String(b.dataset.go===top)));
+  $("#fabScan").hidden = S.view!=="farben";
+  if(S.view==="farben") renderPaints();
+  else if(S.view==="rezepte") renderRecipes();
+  else if(S.view==="rezept") renderRecipe();
+  else renderSettings();
+}
+$$("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
+$$("dialog [data-close]").forEach(b=>b.onclick=()=>b.closest("dialog").close());
+
+document.addEventListener("click", e=>{
+  const el=e.target.closest("[data-action]"); if(!el) return;
+  const a=el.dataset.action, id=el.dataset.id;
+  const path = el.dataset.path!==undefined ? pathOf(el) : null;
+  switch(a){
+    case "newPaint": openPaint(null); break;
+    case "editPaint": if(!e.target.closest("[data-stop]")) openPaint(id); break;
+    case "inc": { const p=paintById(id); setQty(id,p.menge+1); render(); break; }
+    case "dec": { const p=paintById(id); setQty(id,p.menge-1); render(); break; }
+    case "scan": openScan(); break;
+    case "scanIntoForm": openScan("form"); break;
+    case "clearFilter": S.filter={...S.filter,q:"",hersteller:"",typ:""}; render(); break;
+    case "sample": loadSample(); break;
+    case "newRecipe": S.editing={id:uid(),name:"",notiz:"",schritte:[blankStep()]}; editorErrors=new Set(); S.recipeId=S.editing.id; S.view="rezept"; render(); window.scrollTo(0,0); break;
+    case "openRecipe": S.recipeId=id; pmIndex=0; S.editing=null; S.view="rezept"; render(); window.scrollTo(0,0); break;
+    case "backRecipes": go("rezepte"); break;
+    case "mode": S.recipeMode=el.dataset.mode; ls.set("fr.mode",S.recipeMode); render(); break;
+    case "pmPrev": pmIndex--; render(); break;
+    case "pmNext": pmIndex++; render(); break;
+    case "pmGo": pmIndex=Number(el.dataset.i); render(); break;
+    case "zoom": $("#imgBig").src=el.src; $("#dlgImg").showModal(); break;
+    case "editRecipe": S.editing=structuredClone(S.recipes.find(r=>r.id===S.recipeId)); editorErrors=new Set(); render(); window.scrollTo(0,0); break;
+    case "cancelEdit": { const isNew=!S.recipes.some(r=>r.id===S.editing.id); S.editing=null; if(isNew) go("rezepte"); else render(); break; }
+    case "saveRecipe": saveRecipe(); break;
+    case "delRecipe": el.hidden=true; el.nextElementSibling.hidden=false; break;
+    case "delRecipeConfirm": S.recipes=S.recipes.filter(r=>r.id!==S.editing.id); S.recipeDel[S.editing.id]=now(); S.editing=null; changed(); go("rezepte"); toast("Rezept gelöscht"); break;
+    case "addStep": { const s=blankStep(); if(path.length===0 && el.dataset.path==="") S.editing.schritte.push(s); else (stepAt(path).schritte ||= []).push(s); renderEditor(); break; }
+    case "delStep": { const arr=arrAt(path); arr.splice(path.at(-1),1); renderEditor(); break; }
+    case "up": case "down": { const arr=arrAt(path), i=path.at(-1), j=a==="up"?i-1:i+1; [arr[i],arr[j]]=[arr[j],arr[i]]; renderEditor(); break; }
+    case "addPaintMat": openPick(path); break;
+    case "addTextMat": stepAt(path).materialien.push({art:"text",text:""}); renderEditor(); { const ins=$$(`#view input[data-path="${el.dataset.path}"][data-mtext]`); ins.at(-1)?.focus(); } break;
+    case "delMat": stepAt(path).materialien.splice(Number(el.dataset.mi),1); renderEditor(); break;
+    case "delImg": stepAt(path).bild=""; renderEditor(); break;
+    case "connect": if(!Sync.clientId()){ toast("Bitte zuerst die Client-ID eintragen."); break; } Sync.client=null; Sync.run(true).then(render); break;
+    case "syncNow": Sync.run(true); break;
+    case "disconnect": Sync.disconnect(); render(); break;
+    case "export": exportJson(); break;
+  }
+});
+
+/* ---------- Start ---------- */
+(async function init(){
+  await idb.open();
+  const p=await idb.get("paints"), r=await idb.get("recipes");
+  if(p){ S.paints=p.list||[]; S.paintDel=p.del||{}; }
+  if(r){ S.recipes=r.list||[]; S.recipeDel=r.del||{}; }
+  render();
+  if(Sync.clientId() && ls.get("fr.connected",false)){ Sync.status("busy","Verbinde …"); Sync.run(); }
+})();
+</script>
+</body>
+</html>
