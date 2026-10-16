@@ -743,8 +743,8 @@ const MODES = {
 };
 let pmIndex=0;
 function renderRecipe(){
-  const r=S.recipes.find(x=>x.id===S.recipeId); if(!r){ S.view="rezepte"; return render(); }
   if(S.editing) return renderEditor();
+  const r=S.recipes.find(x=>x.id===S.recipeId); if(!r){ S.view="rezepte"; return render(); }
   const v=$("#view"), mode=S.recipeMode;
   const shop = recipePaints(r);
   let content;
